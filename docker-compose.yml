@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+  cybernest:
+    build: .
+    container_name: cybernest
+    ports:
+      - "8000:8000"
+    volumes:
+      - cybernest-data:/app/backend/data
+      - ./config:/app/config
+    environment:
+      - CYBERNEST_DEBUG=false
+      - CYBERNEST_DATABASE_URL=sqlite+aiosqlite:///./data/cybernest.db
+    restart: unless-stopped
+
+  # Optional: Redis for Celery task queue (uncomment when needed)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: cybernest-redis
+  #   ports:
+  #     - "6379:6379"
+  #   restart: unless-stopped
+
+volumes:
+  cybernest-data:
