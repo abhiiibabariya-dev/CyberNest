@@ -88,6 +88,29 @@ def dashboard_stats(db: Session = Depends(get_db)):
         ).scalar() or 0
         severity_counts[sev.value] = count
 
+    # Events per hour (last 24h)
+    events_per_hour = []
+    for i in range(24):
+        hour_start = now - timedelta(hours=24 - i)
+        hour_end = now - timedelta(hours=23 - i)
+        count = db.execute(
+            select(func.count(Event.id)).where(
+                Event.timestamp >= hour_start,
+                Event.timestamp < hour_end,
+            )
+        ).scalar() or 0
+        events_per_hour.append({"hour": hour_start.strftime("%H:%M"), "count": count})
+
+    # Top source IPs
+    top_ips_query = db.execute(
+        select(Event.src_ip, func.count(Event.id).label("count"))
+        .where(Event.src_ip.isnot(None))
+        .group_by(Event.src_ip)
+        .order_by(desc("count"))
+        .limit(10)
+    ).all()
+    top_source_ips = [{"ip": row[0], "count": row[1]} for row in top_ips_query]
+
     return DashboardStats(
         total_events=total_events,
         total_alerts=total_alerts,
@@ -95,11 +118,106 @@ def dashboard_stats(db: Session = Depends(get_db)):
         critical_alerts=critical_alerts,
         active_incidents=active_incidents,
         playbook_runs_today=playbook_runs,
-        events_per_hour=[],
+        events_per_hour=events_per_hour,
         alerts_by_severity=severity_counts,
-        top_source_ips=[],
+        top_source_ips=top_source_ips,
         recent_alerts=recent_alerts,
     )
+
+
+# ─── Analytics ───
+
+@router.get("/analytics/top-attackers")
+def top_attackers(limit: int = 10, db: Session = Depends(get_db)):
+    rows = db.execute(
+        select(Event.src_ip, func.count(Event.id).label("count"))
+        .where(Event.src_ip.isnot(None))
+        .group_by(Event.src_ip)
+        .order_by(desc("count"))
+        .limit(limit)
+    ).all()
+    return [{"ip": r[0], "count": r[1]} for r in rows]
+
+
+@router.get("/analytics/top-targets")
+def top_targets(limit: int = 10, db: Session = Depends(get_db)):
+    rows = db.execute(
+        select(Event.dst_ip, func.count(Event.id).label("count"))
+        .where(Event.dst_ip.isnot(None))
+        .group_by(Event.dst_ip)
+        .order_by(desc("count"))
+        .limit(limit)
+    ).all()
+    return [{"ip": r[0], "count": r[1]} for r in rows]
+
+
+@router.get("/analytics/events-by-category")
+def events_by_category(db: Session = Depends(get_db)):
+    rows = db.execute(
+        select(Event.category, func.count(Event.id).label("count"))
+        .where(Event.category.isnot(None))
+        .group_by(Event.category)
+        .order_by(desc("count"))
+    ).all()
+    return [{"category": r[0], "count": r[1]} for r in rows]
+
+
+@router.get("/analytics/events-by-severity")
+def events_by_severity(db: Session = Depends(get_db)):
+    rows = db.execute(
+        select(Event.severity, func.count(Event.id).label("count"))
+        .group_by(Event.severity)
+        .order_by(desc("count"))
+    ).all()
+    return [{"severity": r[0].value if r[0] else "unknown", "count": r[1]} for r in rows]
+
+
+@router.get("/analytics/top-hosts")
+def top_hosts(limit: int = 10, db: Session = Depends(get_db)):
+    rows = db.execute(
+        select(Event.hostname, func.count(Event.id).label("count"))
+        .where(Event.hostname.isnot(None))
+        .group_by(Event.hostname)
+        .order_by(desc("count"))
+        .limit(limit)
+    ).all()
+    return [{"hostname": r[0], "count": r[1]} for r in rows]
+
+
+@router.get("/analytics/alert-trend")
+def alert_trend(db: Session = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+    trend = []
+    for i in range(7):
+        day_start = (now - timedelta(days=6 - i)).replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+        count = db.execute(
+            select(func.count(Alert.id)).where(
+                Alert.created_at >= day_start,
+                Alert.created_at < day_end,
+            )
+        ).scalar() or 0
+        trend.append({"date": day_start.strftime("%b %d"), "count": count})
+    return trend
+
+
+@router.get("/analytics/mitre-coverage")
+def mitre_coverage(db: Session = Depends(get_db)):
+    rows = db.execute(
+        select(DetectionRule.mitre_tactic, DetectionRule.mitre_technique, DetectionRule.severity, DetectionRule.name)
+        .where(DetectionRule.mitre_tactic.isnot(None))
+    ).all()
+    tactics = {}
+    for row in rows:
+        tactic = row[0]
+        if tactic not in tactics:
+            tactics[tactic] = []
+        tactics[tactic].append({
+            "technique": row[1],
+            "severity": row[2].value if row[2] else "medium",
+            "rule": row[3],
+        })
+    return tactics
 
 
 # ─── SIEM: Events ───
