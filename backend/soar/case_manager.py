@@ -1,15 +1,15 @@
 """Case/Incident management for SOAR."""
 
 from datetime import datetime, timezone
-from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 from loguru import logger
 
 from core.models import Incident, Alert, IncidentStatus, Severity
 
 
-async def create_incident(
-    db: AsyncSession,
+def create_incident(
+    db: Session,
     title: str,
     severity: str,
     description: str = None,
@@ -32,26 +32,23 @@ async def create_incident(
         ],
     )
     db.add(incident)
-    await db.flush()
+    db.flush()
 
-    # Link alerts to incident
     if alert_ids:
-        result = await db.execute(select(Alert).where(Alert.id.in_(alert_ids)))
-        alerts = result.scalars().all()
+        alerts = db.execute(select(Alert).where(Alert.id.in_(alert_ids))).scalars().all()
         for alert in alerts:
             alert.incident_id = incident.id
 
-    await db.commit()
+    db.commit()
     logger.info(f"Incident created: #{incident.id} - {title}")
     return incident
 
 
-async def update_incident_status(
-    db: AsyncSession, incident_id: int, new_status: str, details: str = None
+def update_incident_status(
+    db: Session, incident_id: int, new_status: str, details: str = None
 ) -> Incident:
     """Update incident status and add timeline entry."""
-    result = await db.execute(select(Incident).where(Incident.id == incident_id))
-    incident = result.scalar_one_or_none()
+    incident = db.execute(select(Incident).where(Incident.id == incident_id)).scalar_one_or_none()
     if not incident:
         raise ValueError(f"Incident {incident_id} not found")
 
@@ -70,16 +67,15 @@ async def update_incident_status(
     if new_status == "closed":
         incident.closed_at = datetime.now(timezone.utc)
 
-    await db.commit()
+    db.commit()
     return incident
 
 
-async def add_timeline_entry(
-    db: AsyncSession, incident_id: int, action: str, details: str
+def add_timeline_entry(
+    db: Session, incident_id: int, action: str, details: str
 ) -> Incident:
     """Add a custom timeline entry to an incident."""
-    result = await db.execute(select(Incident).where(Incident.id == incident_id))
-    incident = result.scalar_one_or_none()
+    incident = db.execute(select(Incident).where(Incident.id == incident_id)).scalar_one_or_none()
     if not incident:
         raise ValueError(f"Incident {incident_id} not found")
 
@@ -89,5 +85,5 @@ async def add_timeline_entry(
         "details": details,
     }
     incident.timeline = incident.timeline + [entry]
-    await db.commit()
+    db.commit()
     return incident

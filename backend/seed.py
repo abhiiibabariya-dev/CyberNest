@@ -1,10 +1,9 @@
 """Seed database with demo data for CyberNest dashboard."""
 
-import asyncio
 import random
 from datetime import datetime, timezone, timedelta
 
-from core.database import init_db, async_session
+from core.database import engine, SessionLocal, Base
 from core.models import (
     Event, Alert, AlertStatus, DetectionRule, LogSource,
     Incident, IncidentStatus, Playbook, PlaybookRun, PlaybookStatus,
@@ -185,12 +184,13 @@ PLAYBOOK_DATA = [
 ]
 
 
-async def seed():
+def seed():
     """Populate database with demo data."""
-    await init_db()
+    Base.metadata.create_all(bind=engine)
 
-    async with async_session() as db:
-        # ── Create demo user ──
+    db = SessionLocal()
+    try:
+        # ── Create demo users ──
         admin = User(
             username="admin",
             email="admin@cybernest.local",
@@ -204,7 +204,7 @@ async def seed():
             role="analyst",
         )
         db.add_all([admin, analyst])
-        await db.flush()
+        db.flush()
 
         # ── Create log sources ──
         sources = [
@@ -216,12 +216,12 @@ async def seed():
             LogSource(name="Email Gateway", source_type="api", host="mail-srv-01", port=9200, enabled=True),
         ]
         db.add_all(sources)
-        await db.flush()
+        db.flush()
 
         # ── Create events ──
         now = datetime.now(timezone.utc)
         events = []
-        for i, raw_log in enumerate(DEMO_LOGS):
+        for raw_log in DEMO_LOGS:
             ts = now - timedelta(minutes=random.randint(1, 1440))
             event = Event(
                 timestamp=ts,
@@ -237,7 +237,6 @@ async def seed():
             )
             events.append(event)
 
-        # Add more random events for volume
         for i in range(75):
             ts = now - timedelta(minutes=random.randint(1, 2880))
             event = Event(
@@ -255,58 +254,28 @@ async def seed():
             events.append(event)
 
         db.add_all(events)
-        await db.flush()
+        db.flush()
 
         # ── Create detection rules ──
         rules = [
-            DetectionRule(
-                name="Brute Force Login Attempt",
-                description="Detects multiple failed login attempts",
-                severity=Severity.HIGH,
+            DetectionRule(name="Brute Force Login Attempt", description="Detects multiple failed login attempts", severity=Severity.HIGH,
                 logic={"conditions": [{"field": "message", "operator": "contains", "value": "failed password"}]},
-                mitre_tactic="Credential Access",
-                mitre_technique="T1110",
-                enabled=True,
-            ),
-            DetectionRule(
-                name="Suspected C2 Communication",
-                description="Detects potential C2 beacon patterns",
-                severity=Severity.CRITICAL,
+                mitre_tactic="Credential Access", mitre_technique="T1110", enabled=True),
+            DetectionRule(name="Suspected C2 Communication", description="Detects potential C2 beacon patterns", severity=Severity.CRITICAL,
                 logic={"conditions": [{"field": "message", "operator": "regex", "value": "beacon|c2|callback"}]},
-                mitre_tactic="Command and Control",
-                mitre_technique="T1071",
-                enabled=True,
-            ),
-            DetectionRule(
-                name="Suspicious PowerShell",
-                description="Detects encoded or obfuscated PowerShell",
-                severity=Severity.CRITICAL,
+                mitre_tactic="Command and Control", mitre_technique="T1071", enabled=True),
+            DetectionRule(name="Suspicious PowerShell", description="Detects encoded or obfuscated PowerShell", severity=Severity.CRITICAL,
                 logic={"conditions": [{"field": "message", "operator": "contains", "value": "Invoke-Expression"}]},
-                mitre_tactic="Execution",
-                mitre_technique="T1059.001",
-                enabled=True,
-            ),
-            DetectionRule(
-                name="Port Scan Detected",
-                description="Detects network scanning activity",
-                severity=Severity.MEDIUM,
+                mitre_tactic="Execution", mitre_technique="T1059.001", enabled=True),
+            DetectionRule(name="Port Scan Detected", description="Detects network scanning activity", severity=Severity.MEDIUM,
                 logic={"conditions": [{"field": "message", "operator": "contains", "value": "scan"}]},
-                mitre_tactic="Reconnaissance",
-                mitre_technique="T1046",
-                enabled=True,
-            ),
-            DetectionRule(
-                name="Ransomware Indicators",
-                description="Detects mass file encryption patterns",
-                severity=Severity.CRITICAL,
+                mitre_tactic="Reconnaissance", mitre_technique="T1046", enabled=True),
+            DetectionRule(name="Ransomware Indicators", description="Detects mass file encryption patterns", severity=Severity.CRITICAL,
                 logic={"conditions": [{"field": "message", "operator": "regex", "value": "ransomware|encrypted|locked"}]},
-                mitre_tactic="Impact",
-                mitre_technique="T1486",
-                enabled=True,
-            ),
+                mitre_tactic="Impact", mitre_technique="T1486", enabled=True),
         ]
         db.add_all(rules)
-        await db.flush()
+        db.flush()
 
         # ── Create alerts ──
         severities = [Severity.CRITICAL, Severity.HIGH, Severity.HIGH, Severity.MEDIUM,
@@ -334,7 +303,7 @@ async def seed():
             )
             alerts.append(alert)
         db.add_all(alerts)
-        await db.flush()
+        db.flush()
 
         # ── Create incidents ──
         incidents = []
@@ -355,9 +324,8 @@ async def seed():
             )
             incidents.append(incident)
         db.add_all(incidents)
-        await db.flush()
+        db.flush()
 
-        # Link some alerts to incidents
         for i, alert in enumerate(alerts[:5]):
             alert.incident_id = incidents[i % len(incidents)].id
 
@@ -374,9 +342,9 @@ async def seed():
             )
             playbooks.append(pb)
         db.add_all(playbooks)
-        await db.flush()
+        db.flush()
 
-        # ── Create some playbook runs ──
+        # ── Create playbook runs ──
         for i in range(8):
             run = PlaybookRun(
                 playbook_id=random.choice([p.id for p in playbooks]),
@@ -391,7 +359,10 @@ async def seed():
             )
             db.add(run)
 
-        await db.commit()
+        db.commit()
+
+    finally:
+        db.close()
 
     print("=" * 50)
     print("  CyberNest - Database Seeded Successfully!")
@@ -411,4 +382,4 @@ async def seed():
 
 
 if __name__ == "__main__":
-    asyncio.run(seed())
+    seed()

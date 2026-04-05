@@ -1,12 +1,15 @@
-"""Database setup and session management."""
+"""Database setup and session management using synchronous SQLAlchemy."""
 
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import create_engine
+from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
 
 from core.config import settings
 
-engine = create_async_engine(settings.DATABASE_URL, echo=settings.DEBUG)
-async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+# Use synchronous SQLite
+SYNC_DB_URL = settings.DATABASE_URL.replace("sqlite+aiosqlite", "sqlite").replace("sqlite+pysqlite", "sqlite")
+
+engine = create_engine(SYNC_DB_URL, echo=settings.DEBUG)
+SessionLocal = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
 
 
 class Base(DeclarativeBase):
@@ -14,15 +17,16 @@ class Base(DeclarativeBase):
 
 
 async def init_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    Base.metadata.create_all(bind=engine)
 
 
-async def get_db():
-    async with async_session() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
