@@ -1,0 +1,67 @@
+# CyberNest Detection Rule - Port Scan
+name: Port Scan Detected
+description: Detects network port scanning activity
+severity: medium
+enabled: true
+alert_title: "Port Scan Activity Detected"
+
+mitre_tactic: Reconnaissance
+mitre_technique: T1046 - Network Service Discovery
+
+logic: or
+conditions:
+  - field: message
+    operator: contains
+    value: "port scan"
+  - field: message
+    operator: regex
+    value: "nmap|masscan|zmap"
+  - field: message
+    operator: contains
+    value: "SYN scan"
+
+---
+# CyberNest Detection Rule - Data Exfiltration
+name: Potential Data Exfiltration
+description: Detects large outbound data transfers
+severity: high
+enabled: true
+alert_title: "Potential Data Exfiltration"
+
+mitre_tactic: Exfiltration
+mitre_technique: T1048 - Exfiltration Over Alternative Protocol
+
+logic: or
+conditions:
+  - field: message
+    operator: regex
+    value: "large.*transfer|exfil|data.*leak"
+  - field: message
+    operator: contains
+    value: "unusual outbound"
+  - field: message
+    operator: regex
+    value: "dns.*tunnel|dns.*exfil"
+
+---
+# CyberNest Detection Rule - Lateral Movement
+name: Lateral Movement Detected
+description: Detects internal network lateral movement
+severity: high
+enabled: true
+alert_title: "Lateral Movement Detected"
+
+mitre_tactic: Lateral Movement
+mitre_technique: T1021 - Remote Services
+
+logic: or
+conditions:
+  - field: message
+    operator: regex
+    value: "psexec|wmic.*process|winrm"
+  - field: message
+    operator: contains
+    value: "lateral movement"
+  - field: message
+    operator: regex
+    value: "pass.?the.?hash|pass.?the.?ticket"

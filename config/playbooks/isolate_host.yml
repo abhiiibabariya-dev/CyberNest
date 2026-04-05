@@ -1,0 +1,35 @@
+# CyberNest SOAR Playbook - Isolate Infected Host
+name: Isolate Infected Host
+description: Network-isolate a host suspected of malware infection
+trigger_type: alert
+trigger_conditions:
+  severity: [critical]
+  category: [malware, ransomware]
+
+steps:
+  - name: Log Isolation Start
+    action: log
+    params:
+      message: "Host isolation initiated for {{hostname}}"
+
+  - name: Isolate Host
+    action: isolate_host
+    params:
+      hostname: "{{hostname}}"
+    on_failure: abort
+
+  - name: Enrich Host IOCs
+    action: enrich_ioc
+    params:
+      ioc: "{{src_ip}}"
+
+  - name: Create Forensics Ticket
+    action: create_ticket
+    params:
+      title: "Malware Investigation: {{hostname}}"
+
+  - name: Notify SOC
+    action: send_notification
+    params:
+      channel: soc-alerts
+      message: "Host {{hostname}} isolated. Forensics ticket created. Awaiting investigation."

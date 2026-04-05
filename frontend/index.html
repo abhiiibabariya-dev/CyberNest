@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CyberNest - SIEM + SOAR Platform</title>
+    <link rel="stylesheet" href="src/assets/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    <!-- Cyber Background Effects -->
+    <div class="cyber-grid"></div>
+    <canvas id="particleCanvas"></canvas>
+
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <i class="fas fa-shield-halved"></i>
+                <span>CyberNest</span>
+            </div>
+            <div class="logo-sub">SIEM + SOAR</div>
+        </div>
+
+        <ul class="nav-menu">
+            <li class="nav-item active" data-page="dashboard">
+                <i class="fas fa-chart-line"></i>
+                <span>Dashboard</span>
+            </li>
+            <li class="nav-item" data-page="alerts">
+                <i class="fas fa-bell"></i>
+                <span>Alerts</span>
+                <span class="badge" id="alertBadge">0</span>
+            </li>
+            <li class="nav-item" data-page="events">
+                <i class="fas fa-stream"></i>
+                <span>Log Explorer</span>
+            </li>
+            <li class="nav-item" data-page="rules">
+                <i class="fas fa-gavel"></i>
+                <span>Detection Rules</span>
+            </li>
+            <li class="nav-divider">SOAR</li>
+            <li class="nav-item" data-page="incidents">
+                <i class="fas fa-fire"></i>
+                <span>Incidents</span>
+            </li>
+            <li class="nav-item" data-page="playbooks">
+                <i class="fas fa-book-open"></i>
+                <span>Playbooks</span>
+            </li>
+            <li class="nav-item" data-page="responses">
+                <i class="fas fa-robot"></i>
+                <span>Auto Response</span>
+            </li>
+            <li class="nav-divider">SYSTEM</li>
+            <li class="nav-item" data-page="sources">
+                <i class="fas fa-server"></i>
+                <span>Log Sources</span>
+            </li>
+            <li class="nav-item" data-page="settings">
+                <i class="fas fa-cog"></i>
+                <span>Settings</span>
+            </li>
+        </ul>
+
+        <div class="sidebar-footer">
+            <div class="system-status">
+                <div class="status-dot online"></div>
+                <span>System Online</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content" id="mainContent">
+        <!-- Top Bar -->
+        <header class="topbar">
+            <div class="topbar-left">
+                <button class="menu-toggle" id="menuToggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h1 class="page-title" id="pageTitle">Dashboard</h1>
+            </div>
+            <div class="topbar-right">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" placeholder="Search events, alerts, IPs..." id="globalSearch">
+                </div>
+                <div class="topbar-actions">
+                    <button class="action-btn" title="Live Feed" id="liveFeedBtn">
+                        <i class="fas fa-satellite-dish"></i>
+                        <span class="pulse-dot"></span>
+                    </button>
+                    <button class="action-btn" title="Notifications">
+                        <i class="fas fa-bell"></i>
+                    </button>
+                    <div class="user-avatar">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Dashboard Page -->
+        <div class="page active" id="page-dashboard">
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon events"><i class="fas fa-stream"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="statEvents">0</span>
+                        <span class="stat-label">Total Events</span>
+                    </div>
+                    <div class="stat-trend up"><i class="fas fa-arrow-up"></i> 12%</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon alerts"><i class="fas fa-exclamation-triangle"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="statAlerts">0</span>
+                        <span class="stat-label">Open Alerts</span>
+                    </div>
+                    <div class="stat-trend down"><i class="fas fa-arrow-down"></i> 5%</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon critical"><i class="fas fa-skull-crossbones"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="statCritical">0</span>
+                        <span class="stat-label">Critical Alerts</span>
+                    </div>
+                    <div class="stat-trend neutral"><i class="fas fa-minus"></i> 0%</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon incidents"><i class="fas fa-fire"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="statIncidents">0</span>
+                        <span class="stat-label">Active Incidents</span>
+                    </div>
+                    <div class="stat-trend up"><i class="fas fa-arrow-up"></i> 2</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon playbooks"><i class="fas fa-robot"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="statPlaybooks">0</span>
+                        <span class="stat-label">Playbook Runs Today</span>
+                    </div>
+                    <div class="stat-trend up"><i class="fas fa-arrow-up"></i> 8</div>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="charts-grid">
+                <div class="chart-card wide">
+                    <div class="chart-header">
+                        <h3>Event Timeline</h3>
+                        <div class="chart-controls">
+                            <button class="chart-btn active">1H</button>
+                            <button class="chart-btn">6H</button>
+                            <button class="chart-btn">24H</button>
+                            <button class="chart-btn">7D</button>
+                        </div>
+                    </div>
+                    <canvas id="eventTimelineChart" height="200"></canvas>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Alerts by Severity</h3>
+                    </div>
+                    <canvas id="severityChart" height="200"></canvas>
+                </div>
+            </div>
+
+            <!-- Tables Row -->
+            <div class="tables-grid">
+                <div class="table-card">
+                    <div class="table-header">
+                        <h3><i class="fas fa-bell"></i> Recent Alerts</h3>
+                        <a href="#" class="view-all" data-page="alerts">View All</a>
+                    </div>
+                    <div class="table-body" id="recentAlertsTable">
+                        <div class="empty-state">
+                            <i class="fas fa-shield-check"></i>
+                            <p>No alerts yet. Ingest some logs to get started.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-card">
+                    <div class="table-header">
+                        <h3><i class="fas fa-crosshairs"></i> Top Source IPs</h3>
+                    </div>
+                    <div class="table-body" id="topIPsTable">
+                        <div class="empty-state">
+                            <i class="fas fa-network-wired"></i>
+                            <p>No events ingested yet.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MITRE ATT&CK Heatmap -->
+            <div class="mitre-card">
+                <div class="table-header">
+                    <h3><i class="fas fa-th"></i> MITRE ATT&CK Coverage</h3>
+                </div>
+                <div class="mitre-heatmap" id="mitreHeatmap">
+                    <div class="mitre-row">
+                        <div class="mitre-tactic">Reconnaissance</div>
+                        <div class="mitre-techniques">
+                            <span class="mitre-cell covered" title="T1595 - Active Scanning">T1595</span>
+                            <span class="mitre-cell covered" title="T1592 - Gather Victim Host Info">T1592</span>
+                            <span class="mitre-cell" title="T1589 - Gather Victim Identity">T1589</span>
+                        </div>
+                    </div>
+                    <div class="mitre-row">
+                        <div class="mitre-tactic">Initial Access</div>
+                        <div class="mitre-techniques">
+                            <span class="mitre-cell covered high" title="T1566 - Phishing">T1566</span>
+                            <span class="mitre-cell covered" title="T1190 - Exploit Public App">T1190</span>
+                            <span class="mitre-cell covered" title="T1133 - External Remote Services">T1133</span>
+                            <span class="mitre-cell" title="T1200 - Hardware Additions">T1200</span>
+                        </div>
+                    </div>
+                    <div class="mitre-row">
+                        <div class="mitre-tactic">Execution</div>
+                        <div class="mitre-techniques">
+                            <span class="mitre-cell covered critical" title="T1059 - Command & Scripting">T1059</span>
+                            <span class="mitre-cell covered high" title="T1204 - User Execution">T1204</span>
+                            <span class="mitre-cell covered" title="T1053 - Scheduled Task/Job">T1053</span>
+                        </div>
+                    </div>
+                    <div class="mitre-row">
+                        <div class="mitre-tactic">Persistence</div>
+                        <div class="mitre-techniques">
+                            <span class="mitre-cell covered" title="T1547 - Boot/Logon Autostart">T1547</span>
+                            <span class="mitre-cell covered high" title="T1136 - Create Account">T1136</span>
+                            <span class="mitre-cell" title="T1098 - Account Manipulation">T1098</span>
+                        </div>
+                    </div>
+                    <div class="mitre-row">
+                        <div class="mitre-tactic">Privilege Escalation</div>
+                        <div class="mitre-techniques">
+                            <span class="mitre-cell covered critical" title="T1068 - Exploitation for Priv Esc">T1068</span>
+                            <span class="mitre-cell covered" title="T1548 - Abuse Elevation Control">T1548</span>
+                        </div>
+                    </div>
+                    <div class="mitre-row">
+                        <div class="mitre-tactic">Lateral Movement</div>
+                        <div class="mitre-techniques">
+                            <span class="mitre-cell covered high" title="T1021 - Remote Services">T1021</span>
+                            <span class="mitre-cell covered" title="T1570 - Lateral Tool Transfer">T1570</span>
+                            <span class="mitre-cell" title="T1563 - Remote Service Hijack">T1563</span>
+                        </div>
+                    </div>
+                    <div class="mitre-row">
+                        <div class="mitre-tactic">Exfiltration</div>
+                        <div class="mitre-techniques">
+                            <span class="mitre-cell covered critical" title="T1041 - Exfil Over C2">T1041</span>
+                            <span class="mitre-cell covered" title="T1048 - Exfil Over Alt Protocol">T1048</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alerts Page -->
+        <div class="page" id="page-alerts">
+            <div class="page-toolbar">
+                <div class="filter-group">
+                    <select id="alertSeverityFilter" class="cyber-select">
+                        <option value="">All Severities</option>
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                    <select id="alertStatusFilter" class="cyber-select">
+                        <option value="">All Statuses</option>
+                        <option value="new">New</option>
+                        <option value="acknowledged">Acknowledged</option>
+                        <option value="investigating">Investigating</option>
+                        <option value="resolved">Resolved</option>
+                    </select>
+                </div>
+                <button class="cyber-btn" onclick="refreshAlerts()">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+            <div class="data-table" id="alertsTable">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Severity</th>
+                            <th>Title</th>
+                            <th>Status</th>
+                            <th>Assigned</th>
+                            <th>Time</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="alertsTableBody">
+                        <tr class="empty-row">
+                            <td colspan="7">No alerts to display</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Events / Log Explorer Page -->
+        <div class="page" id="page-events">
+            <div class="page-toolbar">
+                <div class="search-bar-wide">
+                    <i class="fas fa-search"></i>
+                    <input type="text" placeholder="Search logs... (IP, hostname, message, keyword)" id="eventSearch">
+                    <button class="cyber-btn" onclick="searchEvents()">Search</button>
+                </div>
+                <div class="filter-group">
+                    <select id="eventSeverityFilter" class="cyber-select">
+                        <option value="">All Severities</option>
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                        <option value="info">Info</option>
+                    </select>
+                    <button class="cyber-btn primary" onclick="openIngestModal()">
+                        <i class="fas fa-plus"></i> Ingest Log
+                    </button>
+                </div>
+            </div>
+            <div class="data-table" id="eventsTable">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Severity</th>
+                            <th>Source IP</th>
+                            <th>Dest IP</th>
+                            <th>Hostname</th>
+                            <th>Message</th>
+                        </tr>
+                    </thead>
+                    <tbody id="eventsTableBody">
+                        <tr class="empty-row">
+                            <td colspan="6">No events to display. Ingest logs to get started.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Detection Rules Page -->
+        <div class="page" id="page-rules">
+            <div class="page-toolbar">
+                <h2>Detection Rules</h2>
+                <button class="cyber-btn primary" onclick="openRuleModal()">
+                    <i class="fas fa-plus"></i> Create Rule
+                </button>
+            </div>
+            <div class="rules-grid" id="rulesGrid">
+                <div class="empty-state">
+                    <i class="fas fa-gavel"></i>
+                    <p>No custom rules yet. Add YAML rules to config/rules/ or create one above.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Incidents Page -->
+        <div class="page" id="page-incidents">
+            <div class="page-toolbar">
+                <div class="filter-group">
+                    <select id="incidentStatusFilter" class="cyber-select">
+                        <option value="">All Statuses</option>
+                        <option value="open">Open</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="contained">Contained</option>
+                        <option value="closed">Closed</option>
+                    </select>
+                </div>
+                <button class="cyber-btn primary" onclick="openIncidentModal()">
+                    <i class="fas fa-plus"></i> New Incident
+                </button>
+            </div>
+            <div class="data-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Severity</th>
+                            <th>Title</th>
+                            <th>Status</th>
+                            <th>Assigned</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="incidentsTableBody">
+                        <tr class="empty-row">
+                            <td colspan="7">No incidents</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Playbooks Page -->
+        <div class="page" id="page-playbooks">
+            <div class="page-toolbar">
+                <h2>SOAR Playbooks</h2>
+                <button class="cyber-btn primary">
+                    <i class="fas fa-plus"></i> Create Playbook
+                </button>
+            </div>
+            <div class="playbooks-grid" id="playbooksGrid">
+                <div class="playbook-card">
+                    <div class="playbook-icon"><i class="fas fa-ban"></i></div>
+                    <h4>Block Malicious IP</h4>
+                    <p>Auto-block IPs flagged by detection rules</p>
+                    <div class="playbook-meta">
+                        <span class="tag">auto-trigger</span>
+                        <span class="tag">firewall</span>
+                    </div>
+                    <button class="cyber-btn sm">Run</button>
+                </div>
+                <div class="playbook-card">
+                    <div class="playbook-icon"><i class="fas fa-user-slash"></i></div>
+                    <h4>Disable Compromised Account</h4>
+                    <p>Disable user, revoke sessions, notify SOC</p>
+                    <div class="playbook-meta">
+                        <span class="tag">manual</span>
+                        <span class="tag">identity</span>
+                    </div>
+                    <button class="cyber-btn sm">Run</button>
+                </div>
+                <div class="playbook-card">
+                    <div class="playbook-icon"><i class="fas fa-laptop-medical"></i></div>
+                    <h4>Isolate Infected Host</h4>
+                    <p>Network isolate, collect forensics, create ticket</p>
+                    <div class="playbook-meta">
+                        <span class="tag">auto-trigger</span>
+                        <span class="tag">endpoint</span>
+                    </div>
+                    <button class="cyber-btn sm">Run</button>
+                </div>
+                <div class="playbook-card">
+                    <div class="playbook-icon"><i class="fas fa-envelope-open-text"></i></div>
+                    <h4>Phishing Response</h4>
+                    <p>Analyze email, check IOCs, block sender, notify users</p>
+                    <div class="playbook-meta">
+                        <span class="tag">manual</span>
+                        <span class="tag">email</span>
+                    </div>
+                    <button class="cyber-btn sm">Run</button>
+                </div>
+                <div class="playbook-card">
+                    <div class="playbook-icon"><i class="fas fa-search-plus"></i></div>
+                    <h4>IOC Enrichment</h4>
+                    <p>Enrich IOCs with VirusTotal, AbuseIPDB, Shodan</p>
+                    <div class="playbook-meta">
+                        <span class="tag">auto-trigger</span>
+                        <span class="tag">threat-intel</span>
+                    </div>
+                    <button class="cyber-btn sm">Run</button>
+                </div>
+                <div class="playbook-card">
+                    <div class="playbook-icon"><i class="fas fa-file-alt"></i></div>
+                    <h4>Incident Report Generator</h4>
+                    <p>Auto-generate incident report from timeline</p>
+                    <div class="playbook-meta">
+                        <span class="tag">manual</span>
+                        <span class="tag">reporting</span>
+                    </div>
+                    <button class="cyber-btn sm">Run</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Auto Response Page -->
+        <div class="page" id="page-responses">
+            <div class="page-toolbar">
+                <h2>Automated Response Actions</h2>
+            </div>
+            <div class="response-timeline" id="responseTimeline">
+                <div class="empty-state">
+                    <i class="fas fa-robot"></i>
+                    <p>No automated responses executed yet. They will appear here when playbooks run.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sources Page -->
+        <div class="page" id="page-sources">
+            <div class="page-toolbar">
+                <h2>Log Sources</h2>
+                <button class="cyber-btn primary" onclick="openSourceModal()">
+                    <i class="fas fa-plus"></i> Add Source
+                </button>
+            </div>
+            <div class="sources-grid" id="sourcesGrid">
+                <div class="empty-state">
+                    <i class="fas fa-server"></i>
+                    <p>No log sources configured. Add syslog, API, or agent-based sources.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Page -->
+        <div class="page" id="page-settings">
+            <div class="settings-container">
+                <h2>Settings</h2>
+                <div class="settings-section">
+                    <h3>General</h3>
+                    <div class="setting-row">
+                        <label>Log Retention (days)</label>
+                        <input type="number" value="90" class="cyber-input">
+                    </div>
+                    <div class="setting-row">
+                        <label>Max Events per Query</label>
+                        <input type="number" value="10000" class="cyber-input">
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <h3>Notifications</h3>
+                    <div class="setting-row">
+                        <label>Email Alerts</label>
+                        <label class="toggle"><input type="checkbox"><span class="slider"></span></label>
+                    </div>
+                    <div class="setting-row">
+                        <label>Slack Integration</label>
+                        <label class="toggle"><input type="checkbox"><span class="slider"></span></label>
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <h3>API</h3>
+                    <div class="setting-row">
+                        <label>API Base URL</label>
+                        <input type="text" value="http://localhost:8000/api/v1" class="cyber-input" readonly>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Ingest Log Modal -->
+    <div class="modal-overlay" id="ingestModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3><i class="fas fa-plus-circle"></i> Ingest Log Event</h3>
+                <button class="modal-close" onclick="closeModal('ingestModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Raw Log</label>
+                    <textarea id="ingestLogInput" class="cyber-textarea" rows="5"
+                        placeholder="Paste raw syslog, CEF, or any log format..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Source</label>
+                    <select id="ingestSourceSelect" class="cyber-select">
+                        <option value="">Auto-detect</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="cyber-btn" onclick="closeModal('ingestModal')">Cancel</button>
+                <button class="cyber-btn primary" onclick="submitIngestLog()">
+                    <i class="fas fa-upload"></i> Ingest
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Incident Modal -->
+    <div class="modal-overlay" id="incidentModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h3><i class="fas fa-fire"></i> Create Incident</h3>
+                <button class="modal-close" onclick="closeModal('incidentModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Title</label>
+                    <input type="text" id="incidentTitle" class="cyber-input" placeholder="Incident title...">
+                </div>
+                <div class="form-group">
+                    <label>Severity</label>
+                    <select id="incidentSeverity" class="cyber-select">
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="incidentDescription" class="cyber-textarea" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Assign To</label>
+                    <input type="text" id="incidentAssign" class="cyber-input" placeholder="analyst@cybernest">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="cyber-btn" onclick="closeModal('incidentModal')">Cancel</button>
+                <button class="cyber-btn primary" onclick="submitIncident()">
+                    <i class="fas fa-plus"></i> Create
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="src/components/app.js"></script>
+</body>
+</html>

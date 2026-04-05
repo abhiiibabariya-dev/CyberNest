@@ -1,0 +1,34 @@
+# CyberNest SOAR Playbook - Block Malicious IP
+name: Block Malicious IP
+description: Automatically block IPs flagged by detection rules
+trigger_type: alert
+trigger_conditions:
+  severity: [critical, high]
+
+steps:
+  - name: Log Detection
+    action: log
+    params:
+      message: "Malicious IP detected, initiating block playbook"
+
+  - name: Enrich IOC
+    action: enrich_ioc
+    params:
+      ioc: "{{src_ip}}"
+
+  - name: Block IP on Firewall
+    action: block_ip
+    params:
+      ip: "{{src_ip}}"
+    on_failure: abort
+
+  - name: Create Ticket
+    action: create_ticket
+    params:
+      title: "Blocked Malicious IP: {{src_ip}}"
+
+  - name: Notify SOC Team
+    action: send_notification
+    params:
+      channel: soc-alerts
+      message: "Malicious IP {{src_ip}} has been blocked automatically"

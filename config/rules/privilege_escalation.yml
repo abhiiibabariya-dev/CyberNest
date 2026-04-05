@@ -1,0 +1,44 @@
+# CyberNest Detection Rule - Privilege Escalation
+name: Privilege Escalation Attempt
+description: Detects attempts to escalate privileges
+severity: critical
+enabled: true
+alert_title: "Privilege Escalation Attempt"
+
+mitre_tactic: Privilege Escalation
+mitre_technique: T1068 - Exploitation for Privilege Escalation
+
+logic: or
+conditions:
+  - field: message
+    operator: regex
+    value: "sudo.*root|su\\s+root|privilege.*escalat"
+  - field: message
+    operator: contains
+    value: "unauthorized access"
+  - field: message
+    operator: regex
+    value: "setuid|setgid|chmod.*4755"
+
+---
+# CyberNest Detection Rule - New Admin Account
+name: New Admin Account Created
+description: Detects creation of new admin/root accounts
+severity: high
+enabled: true
+alert_title: "New Admin Account Created"
+
+mitre_tactic: Persistence
+mitre_technique: T1136 - Create Account
+
+logic: or
+conditions:
+  - field: message
+    operator: regex
+    value: "new.*admin|admin.*created|useradd.*sudo"
+  - field: message
+    operator: contains
+    value: "account created"
+  - field: message
+    operator: regex
+    value: "net.*user.*add|net.*localgroup.*admin"
