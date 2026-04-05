@@ -1,7 +1,7 @@
 """Log ingestion service - receives and processes incoming logs."""
 
 from datetime import datetime, timezone
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from loguru import logger
 
 from core.models import Event, Alert, AlertStatus, Severity
@@ -18,13 +18,10 @@ SEVERITY_MAP = {
 }
 
 
-async def ingest_log(db: AsyncSession, raw_log: str, source_id: int = None) -> dict:
+def ingest_log(db: Session, raw_log: str, source_id: int = None) -> dict:
     """Ingest a raw log: parse, store, and run detection."""
-
-    # Parse the raw log
     parsed = parse_log(raw_log)
 
-    # Create event record
     event = Event(
         timestamp=datetime.now(timezone.utc),
         source_id=source_id,
@@ -40,9 +37,8 @@ async def ingest_log(db: AsyncSession, raw_log: str, source_id: int = None) -> d
         mitre_technique=parsed.get("mitre_technique"),
     )
     db.add(event)
-    await db.flush()
+    db.flush()
 
-    # Run detection engine
     event_data = {
         "id": event.id,
         "raw_log": raw_log,
@@ -56,7 +52,6 @@ async def ingest_log(db: AsyncSession, raw_log: str, source_id: int = None) -> d
 
     triggered_alerts = run_detection(event_data)
 
-    # Create alerts for triggered rules
     created_alerts = []
     for alert_data in triggered_alerts:
         alert = Alert(
@@ -73,7 +68,7 @@ async def ingest_log(db: AsyncSession, raw_log: str, source_id: int = None) -> d
         db.add(alert)
         created_alerts.append(alert_data)
 
-    await db.commit()
+    db.commit()
 
     return {
         "event_id": event.id,
@@ -82,16 +77,14 @@ async def ingest_log(db: AsyncSession, raw_log: str, source_id: int = None) -> d
     }
 
 
-async def ingest_batch(db: AsyncSession, logs: list[str], source_id: int = None) -> dict:
+def ingest_batch(db: Session, logs: list[str], source_id: int = None) -> dict:
     """Ingest a batch of raw logs."""
     results = []
     total_alerts = 0
-
     for raw_log in logs:
-        result = await ingest_log(db, raw_log, source_id)
+        result = ingest_log(db, raw_log, source_id)
         results.append(result)
         total_alerts += result["alerts_triggered"]
-
     return {
         "events_ingested": len(results),
         "alerts_triggered": total_alerts,
