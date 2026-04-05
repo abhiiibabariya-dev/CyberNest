@@ -1,0 +1,33 @@
+# CyberNest SOAR Playbook - Compromised Account Response
+name: Disable Compromised Account
+description: Disable a user account suspected of being compromised
+trigger_type: manual
+
+steps:
+  - name: Log Incident Start
+    action: log
+    params:
+      message: "Compromised account response initiated for {{user}}"
+
+  - name: Disable User Account
+    action: disable_user
+    params:
+      username: "{{user}}"
+    on_failure: abort
+
+  - name: Create Incident Ticket
+    action: create_ticket
+    params:
+      title: "Compromised Account: {{user}}"
+
+  - name: Notify Security Team
+    action: send_notification
+    params:
+      channel: security-incidents
+      message: "Account {{user}} has been disabled due to compromise. Incident ticket created."
+
+  - name: Notify User Manager
+    action: send_notification
+    params:
+      channel: management
+      message: "User account {{user}} disabled for security investigation"

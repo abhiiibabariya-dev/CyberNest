@@ -1,0 +1,47 @@
+# CyberNest Detection Rule - Brute Force Attack
+name: Brute Force Login Attempt
+description: Detects multiple failed login attempts indicating brute force attack
+severity: high
+enabled: true
+alert_title: "Brute Force Attack Detected"
+
+mitre_tactic: Credential Access
+mitre_technique: T1110 - Brute Force
+
+logic: or
+conditions:
+  - field: message
+    operator: contains
+    value: "failed login"
+  - field: message
+    operator: contains
+    value: "authentication failure"
+  - field: message
+    operator: contains
+    value: "invalid password"
+  - field: message
+    operator: regex
+    value: "failed.*password.*for"
+
+---
+# CyberNest Detection Rule - SSH Brute Force
+name: SSH Brute Force
+description: Detects SSH brute force attempts from syslog
+severity: high
+enabled: true
+alert_title: "SSH Brute Force Detected"
+
+mitre_tactic: Credential Access
+mitre_technique: T1110.001 - Password Guessing
+
+logic: or
+conditions:
+  - field: message
+    operator: contains
+    value: "Failed password for"
+  - field: message
+    operator: contains
+    value: "Invalid user"
+  - field: message
+    operator: regex
+    value: "sshd.*Failed"
