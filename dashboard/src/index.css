@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #0a0e1a; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+/* Severity badge colors */
+.severity-critical { @apply bg-red-600/20 text-red-400 border border-red-600/30; }
+.severity-high { @apply bg-orange-600/20 text-orange-400 border border-orange-600/30; }
+.severity-medium { @apply bg-yellow-600/20 text-yellow-400 border border-yellow-600/30; }
+.severity-low { @apply bg-blue-600/20 text-blue-400 border border-blue-600/30; }
+.severity-info { @apply bg-gray-600/20 text-gray-400 border border-gray-600/30; }
+
+/* Status badges */
+.status-new { @apply bg-red-500/20 text-red-400; }
+.status-acknowledged { @apply bg-yellow-500/20 text-yellow-400; }
+.status-investigating { @apply bg-blue-500/20 text-blue-400; }
+.status-resolved { @apply bg-green-500/20 text-green-400; }
+.status-false_positive { @apply bg-gray-500/20 text-gray-400; }
+
+/* Glow animation for live indicator */
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 4px #10b981, 0 0 8px #10b98140; }
+  50% { box-shadow: 0 0 8px #10b981, 0 0 16px #10b98160; }
+}
+.live-indicator { animation: pulse-glow 2s ease-in-out infinite; }
+
+/* Table row hover */
+.data-row:hover { @apply bg-white/5; }
