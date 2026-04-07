@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CyberNest — Enterprise SIEM + SOAR Platform</title>
+  <meta name="description" content="Open-source, self-hosted SIEM + SOAR platform. Real-time threat detection, automated incident response, MITRE ATT&CK coverage.">
+  <meta name="keywords" content="SIEM, SOAR, Security Operations, Threat Detection, Incident Response, Open Source, CyberNest">
+  <meta property="og:title" content="CyberNest — Enterprise SIEM + SOAR Platform">
+  <meta property="og:description" content="Open-source unified security operations platform with real-time detection, automated response, and MITRE ATT&CK mapping.">
+  <meta property="og:type" content="website">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #050816;
+      --bg-2: #0a0e1a;
+      --surface: #111827;
+      --card: #1a2235;
+      --border: #1e293b;
+      --accent: #3b82f6;
+      --accent-glow: #3b82f680;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --dim: #64748b;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    code, .mono { font-family: 'JetBrains Mono', monospace; }
+
+    /* ─── Navbar ─── */
+    .navbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1rem 2rem;
+      background: rgba(5, 8, 22, 0.8);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+    .navbar .logo {
+      display: flex; align-items: center; gap: 0.6rem;
+      font-size: 1.3rem; font-weight: 800; color: #fff;
+    }
+    .navbar .logo svg { width: 28px; height: 28px; }
+    .nav-links { display: flex; gap: 2rem; align-items: center; }
+    .nav-links a { color: var(--muted); font-size: 0.875rem; font-weight: 500; transition: color 0.2s; }
+    .nav-links a:hover { color: #fff; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.6rem 1.4rem; border-radius: 8px; font-size: 0.875rem; font-weight: 600;
+      transition: all 0.2s; cursor: pointer; border: none;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: #2563eb; box-shadow: 0 0 20px var(--accent-glow); }
+    .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
+    .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ─── Hero ─── */
+    .hero {
+      position: relative;
+      padding: 10rem 2rem 6rem;
+      text-align: center;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+      width: 800px; height: 800px;
+      background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+      opacity: 0.15;
+      pointer-events: none;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.4rem 1rem; margin-bottom: 1.5rem;
+      background: var(--accent); background: linear-gradient(135deg, #3b82f620, #8b5cf620);
+      border: 1px solid #3b82f640;
+      border-radius: 100px; font-size: 0.75rem; color: var(--accent); font-weight: 600;
+    }
+    .hero-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .hero h1 {
+      font-size: clamp(2.5rem, 6vw, 4.5rem);
+      font-weight: 900; line-height: 1.1; margin-bottom: 1.5rem;
+      background: linear-gradient(135deg, #fff 30%, var(--accent) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .hero p { font-size: 1.15rem; color: var(--muted); max-width: 640px; margin: 0 auto 2.5rem; }
+    .hero-buttons { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+
+    /* ─── Stats ─── */
+    .stats {
+      display: flex; justify-content: center; gap: 3rem; padding: 3rem 2rem;
+      flex-wrap: wrap;
+    }
+    .stat { text-align: center; }
+    .stat-value { font-size: 2.5rem; font-weight: 800; color: var(--accent); }
+    .stat-label { font-size: 0.8rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 0.25rem; }
+
+    /* ─── Section ─── */
+    section { padding: 5rem 2rem; max-width: 1200px; margin: 0 auto; }
+    .section-label {
+      display: inline-block; padding: 0.3rem 0.8rem; margin-bottom: 1rem;
+      background: var(--accent); background: linear-gradient(135deg, #3b82f615, #8b5cf615);
+      border: 1px solid #3b82f630; border-radius: 6px;
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent);
+    }
+    .section-title { font-size: 2.2rem; font-weight: 800; margin-bottom: 0.75rem; }
+    .section-desc { font-size: 1rem; color: var(--muted); max-width: 600px; margin-bottom: 3rem; }
+
+    /* ─── Feature Grid ─── */
+    .feature-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.5rem;
+    }
+    .feature-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 2rem;
+      transition: all 0.3s;
+    }
+    .feature-card:hover { border-color: var(--accent); transform: translateY(-4px); box-shadow: 0 8px 30px rgba(59,130,246,0.1); }
+    .feature-icon {
+      width: 48px; height: 48px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem; margin-bottom: 1.25rem;
+    }
+    .feature-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .feature-card p { font-size: 0.85rem; color: var(--muted); line-height: 1.6; }
+    .feature-tag { display: inline-block; padding: 0.2rem 0.6rem; margin-top: 1rem; margin-right: 0.3rem; background: #3b82f610; border: 1px solid #3b82f625; border-radius: 4px; font-size: 0.65rem; color: var(--accent); font-weight: 600; }
+
+    /* ─── Architecture ─── */
+    .arch-flow {
+      display: flex; align-items: center; justify-content: center;
+      gap: 0.75rem; flex-wrap: wrap; padding: 2rem; margin: 2rem 0;
+      background: var(--bg-2); border: 1px solid var(--border); border-radius: 16px;
+    }
+    .arch-node {
+      padding: 0.8rem 1.2rem; border-radius: 10px;
+      font-size: 0.8rem; font-weight: 600; text-align: center;
+      border: 1px solid var(--border);
+    }
+    .arch-arrow { color: var(--dim); font-size: 1.2rem; }
+
+    /* ─── Tech Stack ─── */
+    .tech-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem;
+    }
+    .tech-item {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 1rem 1.25rem; background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; font-size: 0.85rem; font-weight: 600;
+    }
+    .tech-item .tech-emoji { font-size: 1.3rem; }
+
+    /* ─── Compared To ─── */
+    .compare-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;
+    }
+    .compare-item {
+      padding: 1.25rem; background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; text-align: center;
+    }
+    .compare-item .name { font-size: 1rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .compare-item .desc { font-size: 0.7rem; color: var(--dim); }
+    .compare-item .check { color: var(--success); font-size: 0.75rem; margin-top: 0.5rem; }
+
+    /* ─── Quick Start ─── */
+    .code-block {
+      background: var(--bg-2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 1.5rem 2rem; margin: 1.5rem 0;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;
+      overflow-x: auto; color: var(--success);
+    }
+    .code-block .comment { color: var(--dim); }
+    .code-block .cmd { color: var(--text); }
+
+    /* ─── CTA ─── */
+    .cta {
+      text-align: center; padding: 6rem 2rem;
+      background: linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+    }
+    .cta h2 { font-size: 2.5rem; font-weight: 800; margin-bottom: 1rem; }
+    .cta p { color: var(--muted); max-width: 500px; margin: 0 auto 2rem; }
+
+    /* ─── Footer ─── */
+    footer {
+      padding: 3rem 2rem; text-align: center;
+      border-top: 1px solid var(--border); font-size: 0.8rem; color: var(--dim);
+    }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .stats { gap: 1.5rem; }
+      .stat-value { font-size: 1.8rem; }
+      .hero { padding: 8rem 1.5rem 4rem; }
+      section { padding: 3rem 1.5rem; }
+      .arch-flow { flex-direction: column; }
+      .arch-arrow { transform: rotate(90deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      CyberNest
+    </div>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#detection">Detection</a>
+      <a href="#stack">Stack</a>
+      <a href="#quickstart">Quick Start</a>
+      <a href="https://github.com/abhiiibabariya-dev/CyberNest" class="btn btn-primary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-badge"><span class="dot"></span> Open Source &amp; Self-Hosted</div>
+    <h1>Enterprise SIEM + SOAR<br>Security Platform</h1>
+    <p>Unified security operations with real-time threat detection, automated incident response, and complete MITRE ATT&CK coverage. Built for SOC teams that demand enterprise power without vendor lock-in.</p>
+    <div class="hero-buttons">
+      <a href="https://github.com/abhiiibabariya-dev/CyberNest" class="btn btn-primary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        View on GitHub
+      </a>
+      <a href="#quickstart" class="btn btn-outline">Quick Start Guide</a>
+    </div>
+  </section>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="stat"><div class="stat-value">12</div><div class="stat-label">Microservices</div></div>
+    <div class="stat"><div class="stat-value">30+</div><div class="stat-label">Sigma Rules</div></div>
+    <div class="stat"><div class="stat-value">11</div><div class="stat-label">Log Parsers</div></div>
+    <div class="stat"><div class="stat-value">10</div><div class="stat-label">Dashboard Pages</div></div>
+    <div class="stat"><div class="stat-value">50K+</div><div class="stat-label">EPS Target</div></div>
+  </div>
+
+  <!-- Features -->
+  <section id="features">
+    <div class="section-label">Platform Capabilities</div>
+    <h2 class="section-title">Everything a SOC Team Needs</h2>
+    <p class="section-desc">From log collection to automated response — CyberNest covers the full security operations lifecycle.</p>
+
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon" style="background: #3b82f615;">&#128737;</div>
+        <h3>SIEM — Detect</h3>
+        <p>Real-time log ingestion from agents, syslog, and APIs. 11 format parsers (Syslog, CEF, LEEF, Windows XML, Suricata, CloudTrail, Palo Alto, FortiGate, Cisco ASA). Normalized to ECS schema with GeoIP enrichment.</p>
+        <span class="feature-tag">Syslog</span><span class="feature-tag">CEF</span><span class="feature-tag">Windows</span><span class="feature-tag">Cloud</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background: #ef444415;">&#9889;</div>
+        <h3>Correlation Engine</h3>
+        <p>Sigma rule format support + custom YAML rules. Sliding window correlation for brute force, port scans, lateral movement, data exfiltration, DNS tunneling, and C2 beaconing detection.</p>
+        <span class="feature-tag">Sigma</span><span class="feature-tag">Sliding Window</span><span class="feature-tag">MITRE ATT&CK</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background: #10b98115;">&#129302;</div>
+        <h3>SOAR — Respond</h3>
+        <p>YAML playbooks with real integrations: VirusTotal, AbuseIPDB, Shodan lookups. Firewall IP blocking, Active Directory user disable, host isolation, Jira tickets, Slack/Teams/PagerDuty notifications.</p>
+        <span class="feature-tag">VirusTotal</span><span class="feature-tag">Jira</span><span class="feature-tag">Slack</span><span class="feature-tag">PagerDuty</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background: #f59e0b15;">&#128269;</div>
+        <h3>Log Search (Splunk-like)</h3>
+        <p>Full-text search over billions of events with field filters, time ranges, boolean operators, and wildcards. Expandable JSON rows, CSV export, saved searches. Powered by Elasticsearch.</p>
+        <span class="feature-tag">Lucene Query</span><span class="feature-tag">Elasticsearch</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background: #8b5cf615;">&#128196;</div>
+        <h3>Case Management</h3>
+        <p>Full incident lifecycle: create cases from alerts, assign analysts, add tasks and observables (IOCs), track timeline, MITRE ATT&CK tagging. Templates for Ransomware IR, Phishing IR, and more.</p>
+        <span class="feature-tag">Timeline</span><span class="feature-tag">Observables</span><span class="feature-tag">Tasks</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background: #06b6d415;">&#128187;</div>
+        <h3>Cross-Platform Agent</h3>
+        <p>Lightweight Python agent for Windows, Linux, macOS. Collects Event Logs, syslog, and custom files. File integrity monitoring, process monitoring, network connection tracking. Auto-enrollment with buffering.</p>
+        <span class="feature-tag">Windows</span><span class="feature-tag">Linux</span><span class="feature-tag">macOS</span><span class="feature-tag">FIM</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background: #ec489915;">&#127760;</div>
+        <h3>Threat Intelligence</h3>
+        <p>Built-in IOC database with STIX/TAXII feed ingestion. Auto-lookup during log parsing. Supports AlienVault OTX, Abuse.ch, FeodoTracker, EmergingThreats, MISP. Custom IOC upload.</p>
+        <span class="feature-tag">STIX 2.1</span><span class="feature-tag">TAXII</span><span class="feature-tag">IOC Scoring</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background: #14b8a615;">&#128202;</div>
+        <h3>React Dashboard</h3>
+        <p>10-page enterprise dashboard: Overview with KPIs/charts, Alert Center, Log Search, Detection Rules, Cases, Playbooks, Threat Intel, Agents, Reports, Settings. Real-time WebSocket alerts. Dark cyber theme.</p>
+        <span class="feature-tag">React</span><span class="feature-tag">TypeScript</span><span class="feature-tag">TailwindCSS</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background: #f4364c15;">&#128274;</div>
+        <h3>Enterprise Security</h3>
+        <p>JWT authentication with 5 RBAC roles (Super Admin to Read-Only). Rate limiting, audit logging, brute force protection. TLS encryption, Nginx reverse proxy with security headers. MFA support.</p>
+        <span class="feature-tag">RBAC</span><span class="feature-tag">JWT</span><span class="feature-tag">Audit Log</span><span class="feature-tag">MFA</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Architecture -->
+  <section id="architecture">
+    <div class="section-label">System Architecture</div>
+    <h2 class="section-title">12 Microservices, One Platform</h2>
+    <p class="section-desc">Each component runs independently or together via Docker Compose. Scale what matters.</p>
+
+    <div class="arch-flow">
+      <div class="arch-node" style="background: #10b98115; border-color: #10b98140;">&#128187; Agents</div>
+      <div class="arch-arrow">&#10132;</div>
+      <div class="arch-node" style="background: #3b82f615; border-color: #3b82f640;">&#128640; Manager API</div>
+      <div class="arch-arrow">&#10132;</div>
+      <div class="arch-node" style="background: #f59e0b15; border-color: #f59e0b40;">&#128230; Kafka</div>
+      <div class="arch-arrow">&#10132;</div>
+      <div class="arch-node" style="background: #8b5cf615; border-color: #8b5cf640;">&#128296; Parser</div>
+      <div class="arch-arrow">&#10132;</div>
+      <div class="arch-node" style="background: #ef444415; border-color: #ef444440;">&#9889; Correlator</div>
+      <div class="arch-arrow">&#10132;</div>
+      <div class="arch-node" style="background: #ec489915; border-color: #ec489940;">&#128276; Alert Manager</div>
+    </div>
+    <div class="arch-flow" style="margin-top: 1rem;">
+      <div class="arch-node" style="background: #06b6d415; border-color: #06b6d440;">&#128451; Elasticsearch</div>
+      <div class="arch-node" style="background: #14b8a615; border-color: #14b8a640;">&#128024; PostgreSQL</div>
+      <div class="arch-node" style="background: #f4364c15; border-color: #f4364c40;">&#9889; Redis</div>
+      <div class="arch-node" style="background: #10b98115; border-color: #10b98140;">&#129302; SOAR Engine</div>
+      <div class="arch-node" style="background: #f59e0b15; border-color: #f59e0b40;">&#127760; Threat Intel</div>
+      <div class="arch-node" style="background: #3b82f615; border-color: #3b82f640;">&#128202; Dashboard</div>
+    </div>
+  </section>
+
+  <!-- Detection Rules -->
+  <section id="detection">
+    <div class="section-label">Detection Coverage</div>
+    <h2 class="section-title">30+ Built-in Sigma Rules</h2>
+    <p class="section-desc">Ships with production detection rules mapped to MITRE ATT&CK. Add your own Sigma rules or custom YAML.</p>
+
+    <div class="feature-grid">
+      <div class="feature-card">
+        <h3>&#127912; Windows Credential Access</h3>
+        <p>LSASS dump, Mimikatz, DCSync, Kerberoasting, Pass-the-Hash, Golden Ticket detection.</p>
+        <span class="feature-tag">T1003</span><span class="feature-tag">T1558</span><span class="feature-tag">T1550</span>
+      </div>
+      <div class="feature-card">
+        <h3>&#128274; Persistence &amp; Defense Evasion</h3>
+        <p>New services, scheduled tasks, registry Run keys, WMI subscriptions, audit log clearing.</p>
+        <span class="feature-tag">T1543</span><span class="feature-tag">T1053</span><span class="feature-tag">T1547</span>
+      </div>
+      <div class="feature-card">
+        <h3>&#128039; Linux Threats</h3>
+        <p>SSH brute force, reverse shells, cron persistence, sudo escalation, /tmp execution, user creation.</p>
+        <span class="feature-tag">T1110</span><span class="feature-tag">T1059</span><span class="feature-tag">T1053</span>
+      </div>
+      <div class="feature-card">
+        <h3>&#127760; Network &amp; Web</h3>
+        <p>DNS tunneling, C2 ports, Tor connections, SQL injection, directory traversal, port scanning.</p>
+        <span class="feature-tag">T1071</span><span class="feature-tag">T1190</span><span class="feature-tag">T1046</span>
+      </div>
+      <div class="feature-card">
+        <h3>&#9729;&#65039; Cloud Security</h3>
+        <p>AWS root login, IAM user creation, S3 public exposure, security group changes, Azure sign-in anomalies.</p>
+        <span class="feature-tag">T1078</span><span class="feature-tag">T1537</span><span class="feature-tag">T1136</span>
+      </div>
+      <div class="feature-card">
+        <h3>&#8987; Sliding Window Correlation</h3>
+        <p>10 built-in rules: brute force (5/60s), port scan (20/30s), lateral movement, data exfil (100MB/5m), password spray, DNS tunneling, C2 beaconing.</p>
+        <span class="feature-tag">Time-Window</span><span class="feature-tag">Redis</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Compared To -->
+  <section>
+    <div class="section-label">Competitive Positioning</div>
+    <h2 class="section-title">Built to Compete With the Best</h2>
+    <p class="section-desc">CyberNest takes the best features from leading platforms — open source and self-hosted.</p>
+    <div class="compare-grid">
+      <div class="compare-item"><div class="name">Splunk</div><div class="desc">Powerful search &amp; dashboards</div><div class="check">&#10004; Lucene search, React UI</div></div>
+      <div class="compare-item"><div class="name">Wazuh</div><div class="desc">Agent-based collection</div><div class="check">&#10004; Cross-platform agent</div></div>
+      <div class="compare-item"><div class="name">IBM QRadar</div><div class="desc">Offense management</div><div class="check">&#10004; Alert correlation</div></div>
+      <div class="compare-item"><div class="name">Microsoft Sentinel</div><div class="desc">Cloud-native, KQL</div><div class="check">&#10004; Cloud log parsers</div></div>
+      <div class="compare-item"><div class="name">TheHive + Cortex</div><div class="desc">Case management</div><div class="check">&#10004; Cases + SOAR engine</div></div>
+      <div class="compare-item"><div class="name">Elastic SIEM</div><div class="desc">ECS normalization</div><div class="check">&#10004; Full ECS schema</div></div>
+    </div>
+  </section>
+
+  <!-- Tech Stack -->
+  <section id="stack">
+    <div class="section-label">Technology</div>
+    <h2 class="section-title">Enterprise-Grade Stack</h2>
+    <p class="section-desc">Production-tested technologies. Every component chosen for scale and reliability.</p>
+    <div class="tech-grid">
+      <div class="tech-item"><span class="tech-emoji">&#128013;</span> Python 3.13 + FastAPI</div>
+      <div class="tech-item"><span class="tech-emoji">&#9883;</span> React + TypeScript</div>
+      <div class="tech-item"><span class="tech-emoji">&#128230;</span> Apache Kafka</div>
+      <div class="tech-item"><span class="tech-emoji">&#128269;</span> Elasticsearch 8</div>
+      <div class="tech-item"><span class="tech-emoji">&#128024;</span> PostgreSQL 16</div>
+      <div class="tech-item"><span class="tech-emoji">&#9889;</span> Redis 7</div>
+      <div class="tech-item"><span class="tech-emoji">&#128179;</span> Docker Compose</div>
+      <div class="tech-item"><span class="tech-emoji">&#127912;</span> TailwindCSS</div>
+      <div class="tech-item"><span class="tech-emoji">&#128640;</span> Nginx</div>
+      <div class="tech-item"><span class="tech-emoji">&#128202;</span> Recharts / D3</div>
+      <div class="tech-item"><span class="tech-emoji">&#128272;</span> JWT + RBAC</div>
+      <div class="tech-item"><span class="tech-emoji">&#128196;</span> Sigma Rules</div>
+    </div>
+  </section>
+
+  <!-- Quick Start -->
+  <section id="quickstart">
+    <div class="section-label">Get Started</div>
+    <h2 class="section-title">Deploy in 3 Commands</h2>
+    <p class="section-desc">From zero to a running SIEM + SOAR in minutes with Docker Compose.</p>
+    <div class="code-block">
+      <span class="comment"># Clone the repository</span><br>
+      <span class="cmd">$ git clone https://github.com/abhiiibabariya-dev/CyberNest.git</span><br>
+      <span class="cmd">$ cd CyberNest</span><br><br>
+      <span class="comment"># Configure environment</span><br>
+      <span class="cmd">$ cp .env.example .env</span><br><br>
+      <span class="comment"># Launch all 12 services</span><br>
+      <span class="cmd">$ docker compose up -d</span><br><br>
+      <span class="comment"># Dashboard: https://localhost</span><br>
+      <span class="comment"># API Docs:  https://localhost/api/docs</span><br>
+      <span class="comment"># Default:   admin / admin123</span>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta">
+    <h2>Ready to Secure Your Infrastructure?</h2>
+    <p>Deploy CyberNest today. Open source, self-hosted, enterprise-grade.</p>
+    <div class="hero-buttons">
+      <a href="https://github.com/abhiiibabariya-dev/CyberNest" class="btn btn-primary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        Star on GitHub
+      </a>
+      <a href="https://github.com/abhiiibabariya-dev/CyberNest/issues" class="btn btn-outline">Report Issues</a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <p>CyberNest &mdash; Open Source SIEM + SOAR Platform &bull; MIT License &bull; Built with &#10084;&#65039; for SOC teams</p>
+    <p style="margin-top: 0.5rem;">&copy; 2024-2026 CyberNest Contributors</p>
+  </footer>
+
+</body>
+</html>
