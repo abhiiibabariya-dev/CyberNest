@@ -1,0 +1,295 @@
+###############################################################################
+# CyberNest — Enterprise SIEM + SOAR Platform
+# Development Docker Compose — All Services
+###############################################################################
+
+version: "3.9"
+
+x-common: &common
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "50m", max-file: "5" }
+
+x-env: &env
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: cybernest
+  POSTGRES_USER: cybernest
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CyberNest_DB_2025}
+  REDIS_URL: redis://redis:6379/0
+  KAFKA_BOOTSTRAP: kafka:9092
+  ES_URL: http://elasticsearch:9200
+  JWT_SECRET: ${JWT_SECRET:-change_me_in_production_64chars_min}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+services:
+  # ═══════════════ INFRASTRUCTURE ═══════════════
+
+  zookeeper:
+    <<: *common
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: cn-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zk_data:/var/lib/zookeeper/data
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | nc localhost 2181 | grep imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [cybernest]
+
+  kafka:
+    <<: *common
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: cn-kafka
+    depends_on:
+      zookeeper: { condition: service_healthy }
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_NUM_PARTITIONS: 6
+      KAFKA_MESSAGE_MAX_BYTES: 10485760
+    ports: ["29092:29092"]
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    networks: [cybernest]
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: cn-kafka-init
+    depends_on:
+      kafka: { condition: service_healthy }
+    entrypoint: ["/bin/bash", "-c"]
+    command: |
+      "
+      for t in cybernest.raw.windows cybernest.raw.linux cybernest.raw.network \
+               cybernest.raw.cloud cybernest.raw.application cybernest.raw.syslog \
+               cybernest.parsed.events cybernest.alerts cybernest.correlation \
+               cybernest.audit cybernest.agent.heartbeat cybernest.soar.actions \
+               cybernest.threat_intel cybernest.dlq; do
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:9092 \
+          --replication-factor 1 --partitions 6 --topic \$$t && echo \"OK: \$$t\"
+      done
+      "
+    networks: [cybernest]
+
+  elasticsearch:
+    <<: *common
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: cn-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - cluster.name=cybernest
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+    ports: ["9200:9200"]
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks: [cybernest]
+
+  redis:
+    <<: *common
+    image: redis:7.2-alpine
+    container_name: cn-redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports: ["6379:6379"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [cybernest]
+
+  postgres:
+    <<: *common
+    image: postgres:15-alpine
+    container_name: cn-postgres
+    environment:
+      POSTGRES_DB: cybernest
+      POSTGRES_USER: cybernest
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CyberNest_DB_2025}
+    ports: ["5432:5432"]
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cybernest"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [cybernest]
+
+  # ═══════════════ CYBERNEST SERVICES ═══════════════
+
+  manager:
+    <<: *common
+    build: { context: .., dockerfile: manager/Dockerfile }
+    container_name: cn-manager
+    environment:
+      <<: *env
+      SERVICE_NAME: manager
+    ports:
+      - "5000:5000"
+      - "514:514/udp"
+      - "601:601/tcp"
+      - "5601:5601"
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      elasticsearch: { condition: service_healthy }
+    networks: [cybernest]
+
+  parser:
+    <<: *common
+    build: { context: .., dockerfile: parser/Dockerfile }
+    container_name: cn-parser
+    environment:
+      <<: *env
+      SERVICE_NAME: parser
+      KAFKA_GROUP: parser-group
+    depends_on:
+      kafka: { condition: service_healthy }
+      elasticsearch: { condition: service_healthy }
+    networks: [cybernest]
+
+  correlator:
+    <<: *common
+    build: { context: .., dockerfile: correlator/Dockerfile }
+    container_name: cn-correlator
+    environment:
+      <<: *env
+      SERVICE_NAME: correlator
+      KAFKA_GROUP: correlation-group
+    depends_on:
+      kafka: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [cybernest]
+
+  alert-manager:
+    <<: *common
+    build: { context: .., dockerfile: alert_manager/Dockerfile }
+    container_name: cn-alert-manager
+    environment:
+      <<: *env
+      SERVICE_NAME: alert-manager
+      KAFKA_GROUP: alert-group
+      SMTP_HOST: ${SMTP_HOST:-}
+      SLACK_WEBHOOK: ${SLACK_WEBHOOK:-}
+      PAGERDUTY_KEY: ${PAGERDUTY_KEY:-}
+    depends_on:
+      kafka: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [cybernest]
+
+  soar:
+    <<: *common
+    build: { context: .., dockerfile: soar/Dockerfile }
+    container_name: cn-soar
+    environment:
+      <<: *env
+      SERVICE_NAME: soar
+      KAFKA_GROUP: soar-group
+      VT_API_KEY: ${VT_API_KEY:-}
+      ABUSEIPDB_KEY: ${ABUSEIPDB_KEY:-}
+      SHODAN_KEY: ${SHODAN_KEY:-}
+    depends_on:
+      kafka: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+    networks: [cybernest]
+
+  indexer:
+    <<: *common
+    build: { context: .., dockerfile: indexer/Dockerfile }
+    container_name: cn-indexer
+    environment:
+      <<: *env
+      SERVICE_NAME: indexer
+      KAFKA_GROUP: indexer-group
+    depends_on:
+      kafka: { condition: service_healthy }
+      elasticsearch: { condition: service_healthy }
+    networks: [cybernest]
+
+  threat-intel:
+    <<: *common
+    build: { context: .., dockerfile: threat_intel/Dockerfile }
+    container_name: cn-threat-intel
+    environment:
+      <<: *env
+      SERVICE_NAME: threat-intel
+      OTX_API_KEY: ${OTX_API_KEY:-}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [cybernest]
+
+  ueba:
+    <<: *common
+    build: { context: .., dockerfile: services/ueba/Dockerfile }
+    container_name: cn-ueba
+    environment:
+      <<: *env
+      SERVICE_NAME: ueba
+      KAFKA_GROUP: ueba-group
+    depends_on:
+      kafka: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [cybernest]
+
+  dashboard:
+    <<: *common
+    build: { context: ../dashboard }
+    container_name: cn-dashboard
+    ports: ["3000:3000"]
+    networks: [cybernest]
+
+  nginx:
+    <<: *common
+    image: nginx:alpine
+    container_name: cn-nginx
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./nginx/cybernest.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+    depends_on: [manager, dashboard]
+    networks: [cybernest]
+
+volumes:
+  zk_data:
+  kafka_data:
+  es_data:
+  redis_data:
+  pg_data:
+
+networks:
+  cybernest:
+    driver: bridge
