@@ -1,0 +1,156 @@
+# CyberNest Helm Chart — Default Values
+# Override these in your values-production.yaml
+
+global:
+  imageTag: "latest"
+  imagePullPolicy: IfNotPresent
+
+# ── Manager API ──
+manager:
+  replicas: 2
+  image: cybernest/manager
+  port: 8000
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: 1000m, memory: 1Gi }
+
+# ── Parser ──
+parser:
+  replicas: 3
+  image: cybernest/parser
+  resources:
+    requests: { cpu: 500m, memory: 512Mi }
+    limits: { cpu: 2000m, memory: 2Gi }
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilization: 70
+
+# ── Correlator ──
+correlator:
+  replicas: 2
+  image: cybernest/correlator
+  resources:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits: { cpu: 2000m, memory: 4Gi }
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilization: 70
+
+# ── Alert Manager ──
+alertManager:
+  replicas: 1
+  image: cybernest/alert-manager
+  resources:
+    requests: { cpu: 250m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+# ── SOAR Engine ──
+soar:
+  replicas: 1
+  image: cybernest/soar
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: 1000m, memory: 1Gi }
+
+# ── Indexer ──
+indexer:
+  replicas: 2
+  image: cybernest/indexer
+  resources:
+    requests: { cpu: 500m, memory: 512Mi }
+    limits: { cpu: 1000m, memory: 1Gi }
+
+# ── Threat Intel ──
+threatIntel:
+  replicas: 1
+  image: cybernest/threat-intel
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+# ── UEBA ──
+ueba:
+  replicas: 1
+  image: cybernest/ueba
+  resources:
+    requests: { cpu: 500m, memory: 1Gi }
+    limits: { cpu: 2000m, memory: 4Gi }
+
+# ── Dashboard ──
+dashboard:
+  replicas: 2
+  image: cybernest/dashboard
+  port: 3000
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+
+# ── Infrastructure ──
+postgresql:
+  enabled: true
+  auth:
+    database: cybernest
+    username: cybernest
+    password: changeme
+  primary:
+    persistence:
+      size: 50Gi
+
+redis:
+  enabled: true
+  auth:
+    enabled: false
+  master:
+    persistence:
+      size: 10Gi
+
+kafka:
+  enabled: true
+  replicaCount: 3
+  persistence:
+    size: 100Gi
+
+elasticsearch:
+  enabled: true
+  replicas: 3
+  volumeClaimTemplate:
+    resources:
+      requests:
+        storage: 200Gi
+
+# ── Ingress ──
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+  hosts:
+    - host: cybernest.example.com
+      paths:
+        - path: /api
+          service: manager
+          port: 8000
+        - path: /ws
+          service: manager
+          port: 8000
+        - path: /
+          service: dashboard
+          port: 3000
+  tls:
+    - secretName: cybernest-tls
+      hosts:
+        - cybernest.example.com
+
+# ── Secrets ──
+secrets:
+  jwtSecret: "change-me-in-production"
+  slackWebhook: ""
+  virustotalApiKey: ""
+  abuseipdbApiKey: ""
+  otxApiKey: ""

@@ -345,6 +345,24 @@ services:
     networks:
       - cybernest-net
 
+  ueba:
+    build:
+      context: ./services/ueba
+      dockerfile: Dockerfile
+    container_name: cybernest-ueba
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      SERVICE_NAME: ueba
+      KAFKA_CONSUMER_GROUP: ueba-group
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - cybernest-net
+
   dashboard:
     build:
       context: ./dashboard
