@@ -1,0 +1,104 @@
+title: AWS IAM User Created
+id: sigma-aws-iam-create
+status: stable
+level: medium
+description: Detects creation of new IAM users in AWS
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    event.action: CreateUser
+    event.module: aws_cloudtrail
+  condition: selection
+tags:
+  - attack.persistence
+  - attack.t1136.003
+falsepositives:
+  - Normal IAM operations
+
+---
+
+title: AWS Root Account Login
+id: sigma-aws-root-login
+status: stable
+level: critical
+description: Detects root account usage in AWS which should be avoided
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    event.action: ConsoleLogin
+    user.name: root
+  condition: selection
+tags:
+  - attack.initial_access
+  - attack.t1078.004
+falsepositives:
+  - Emergency root account access
+
+---
+
+title: AWS S3 Bucket Made Public
+id: sigma-aws-s3-public
+status: stable
+level: critical
+description: Detects S3 bucket ACL changes that make it publicly accessible
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    event.action:
+      - PutBucketAcl
+      - PutBucketPolicy
+  condition: selection
+tags:
+  - attack.exfiltration
+  - attack.t1537
+falsepositives:
+  - Intended public bucket configuration
+
+---
+
+title: AWS Security Group Opened to World
+id: sigma-aws-sg-open
+status: stable
+level: high
+description: Detects security group rule allowing traffic from 0.0.0.0/0
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    event.action:
+      - AuthorizeSecurityGroupIngress
+      - AuthorizeSecurityGroupEgress
+  condition: selection
+tags:
+  - attack.defense_evasion
+  - attack.t1562.007
+falsepositives:
+  - Public-facing load balancers
+
+---
+
+title: Azure AD Suspicious Sign-In
+id: sigma-azure-signin
+status: stable
+level: high
+description: Detects suspicious Azure AD sign-in activity
+logsource:
+  product: azure
+  service: signinlogs
+detection:
+  selection:
+    event.action: Sign-in activity
+    event.outcome: failure
+  condition: selection
+tags:
+  - attack.credential_access
+  - attack.t1110
+falsepositives:
+  - User mistyping password

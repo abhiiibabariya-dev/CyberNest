@@ -1,0 +1,127 @@
+title: DNS Tunneling Suspicious Query Length
+id: sigma-dns-tunnel
+status: stable
+level: high
+description: Detects unusually long DNS queries that may indicate DNS tunneling
+logsource:
+  category: dns
+  product: any
+detection:
+  selection:
+    dns.question.name|re: "^.{50,}"
+  condition: selection
+tags:
+  - attack.command_and_control
+  - attack.t1071.004
+falsepositives:
+  - CDN and cloud service domains with long names
+
+---
+
+title: Connection to Known C2 Port
+id: sigma-c2-port
+status: stable
+level: high
+description: Detects outbound connections to ports commonly used by C2 frameworks
+logsource:
+  category: network_connection
+  product: any
+detection:
+  selection:
+    destination.port:
+      - 4444
+      - 5555
+      - 8443
+      - 1337
+      - 31337
+      - 9999
+    network.direction: outbound
+  condition: selection
+tags:
+  - attack.command_and_control
+  - attack.t1571
+falsepositives:
+  - Legitimate services on these ports
+
+---
+
+title: Tor Network Connection
+id: sigma-tor-connection
+status: stable
+level: high
+description: Detects connections to known Tor network entry/exit nodes
+logsource:
+  category: network_connection
+  product: any
+detection:
+  selection:
+    destination.port:
+      - 9001
+      - 9030
+      - 9050
+      - 9051
+      - 9150
+  condition: selection
+tags:
+  - attack.command_and_control
+  - attack.t1090.003
+falsepositives:
+  - Legitimate Tor usage with authorization
+
+---
+
+title: SQL Injection Attempt in Web Logs
+id: sigma-sqli
+status: stable
+level: high
+description: Detects SQL injection patterns in web server access logs
+logsource:
+  category: webserver
+  product: any
+detection:
+  selection:
+    url.path|contains:
+      - "' OR "
+      - "\" OR "
+      - "UNION SELECT"
+      - "union select"
+      - "1=1"
+      - "DROP TABLE"
+      - "INSERT INTO"
+      - "--"
+      - "/*"
+      - "xp_cmdshell"
+      - "WAITFOR DELAY"
+  condition: selection
+tags:
+  - attack.initial_access
+  - attack.t1190
+falsepositives:
+  - Security scanners
+
+---
+
+title: Directory Traversal Attempt
+id: sigma-dir-traversal
+status: stable
+level: high
+description: Detects directory traversal patterns in web requests
+logsource:
+  category: webserver
+  product: any
+detection:
+  selection:
+    url.path|contains:
+      - "../"
+      - "..%2f"
+      - "..%5c"
+      - "..../"
+      - "/etc/passwd"
+      - "/etc/shadow"
+      - "\\windows\\system32"
+  condition: selection
+tags:
+  - attack.initial_access
+  - attack.t1190
+falsepositives:
+  - Vulnerability scanners
