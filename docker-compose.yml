@@ -1,26 +1,398 @@
+###############################################################################
+# CyberNest — Enterprise SIEM + SOAR Platform
+# Docker Compose (Development / Small Deployment)
+###############################################################################
+
 version: "3.9"
 
+x-common-env: &common-env
+  CYBERNEST_ENV: ${CYBERNEST_ENV:-development}
+  POSTGRES_HOST: postgres
+  POSTGRES_PORT: 5432
+  POSTGRES_DB: ${POSTGRES_DB:-cybernest}
+  POSTGRES_USER: ${POSTGRES_USER:-cybernest}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cybernest_secret}
+  REDIS_URL: redis://redis:6379/0
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  ELASTICSEARCH_URL: http://elasticsearch:9200
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
+  JWT_ALGORITHM: HS256
+  JWT_EXPIRE_MINUTES: 480
+
 services:
-  cybernest:
-    build: .
-    container_name: cybernest
+  # ===========================================================================
+  # INFRASTRUCTURE
+  # ===========================================================================
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: cybernest-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cybernest}
+      POSTGRES_USER: ${POSTGRES_USER:-cybernest}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cybernest_secret}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cybernest}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cybernest-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: cybernest-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cybernest-net
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: cybernest-zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | nc localhost 2181 | grep imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cybernest-net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: cybernest-kafka
+    restart: unless-stopped
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_NUM_PARTITIONS: 6
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_MESSAGE_MAX_BYTES: 10485760
+    ports:
+      - "29092:29092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    networks:
+      - cybernest-net
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: cybernest-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command: |
+      "
+      echo 'Creating Kafka topics...'
+      for topic in \
+        cybernest.raw.windows \
+        cybernest.raw.linux \
+        cybernest.raw.network \
+        cybernest.raw.cloud \
+        cybernest.raw.application \
+        cybernest.raw.syslog \
+        cybernest.parsed.events \
+        cybernest.alerts \
+        cybernest.correlation \
+        cybernest.audit \
+        cybernest.agent.heartbeat \
+        cybernest.soar.actions \
+        cybernest.threat_intel; do
+        kafka-topics --create --if-not-exists \
+          --bootstrap-server kafka:9092 \
+          --replication-factor 1 \
+          --partitions 6 \
+          --topic \$$topic
+        echo \"Created topic: \$$topic\"
+      done
+      echo 'All topics created.'
+      "
+    networks:
+      - cybernest-net
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: cybernest-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - cluster.name=cybernest
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - cybernest-net
+
+  # ===========================================================================
+  # CYBERNEST SERVICES
+  # ===========================================================================
+
+  manager:
+    build:
+      context: ./services/manager
+      dockerfile: Dockerfile
+    container_name: cybernest-manager
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      SERVICE_NAME: manager
+      SYSLOG_UDP_PORT: 514
+      SYSLOG_TCP_PORT: 514
     ports:
       - "8000:8000"
+      - "514:514/udp"
+      - "514:514/tcp"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
     volumes:
-      - cybernest-data:/app/backend/data
       - ./config:/app/config
-    environment:
-      - CYBERNEST_DEBUG=false
-      - CYBERNEST_DATABASE_URL=sqlite+aiosqlite:///./data/cybernest.db
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cybernest-net
+
+  parser:
+    build:
+      context: ./services/parser
+      dockerfile: Dockerfile
+    container_name: cybernest-parser
     restart: unless-stopped
+    environment:
+      <<: *common-env
+      SERVICE_NAME: parser
+      KAFKA_CONSUMER_GROUP: parser-group
+      MAXMIND_DB_PATH: /app/data/GeoLite2-City.mmdb
+    depends_on:
+      kafka:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    volumes:
+      - parser_data:/app/data
+    networks:
+      - cybernest-net
 
-  # Optional: Redis for Celery task queue (uncomment when needed)
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: cybernest-redis
-  #   ports:
-  #     - "6379:6379"
-  #   restart: unless-stopped
+  correlator:
+    build:
+      context: ./services/correlator
+      dockerfile: Dockerfile
+    container_name: cybernest-correlator
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      SERVICE_NAME: correlator
+      KAFKA_CONSUMER_GROUP: correlation-group
+      RULES_DIR: /app/rules
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config/rules:/app/rules
+    networks:
+      - cybernest-net
 
+  alert-manager:
+    build:
+      context: ./services/alert_manager
+      dockerfile: Dockerfile
+    container_name: cybernest-alert-manager
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      SERVICE_NAME: alert-manager
+      KAFKA_CONSUMER_GROUP: alert-group
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      PAGERDUTY_API_KEY: ${PAGERDUTY_API_KEY:-}
+      TEAMS_WEBHOOK_URL: ${TEAMS_WEBHOOK_URL:-}
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - cybernest-net
+
+  soar:
+    build:
+      context: ./services/soar
+      dockerfile: Dockerfile
+    container_name: cybernest-soar
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      SERVICE_NAME: soar
+      KAFKA_CONSUMER_GROUP: soar-group
+      VIRUSTOTAL_API_KEY: ${VIRUSTOTAL_API_KEY:-}
+      ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY:-}
+      SHODAN_API_KEY: ${SHODAN_API_KEY:-}
+      JIRA_URL: ${JIRA_URL:-}
+      JIRA_USER: ${JIRA_USER:-}
+      JIRA_TOKEN: ${JIRA_TOKEN:-}
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./config/playbooks:/app/playbooks
+    networks:
+      - cybernest-net
+
+  indexer:
+    build:
+      context: ./services/indexer
+      dockerfile: Dockerfile
+    container_name: cybernest-indexer
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      SERVICE_NAME: indexer
+      KAFKA_CONSUMER_GROUP: indexer-group
+    depends_on:
+      kafka:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - cybernest-net
+
+  threat-intel:
+    build:
+      context: ./services/threat_intel
+      dockerfile: Dockerfile
+    container_name: cybernest-threat-intel
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      SERVICE_NAME: threat-intel
+      OTX_API_KEY: ${OTX_API_KEY:-}
+      FEED_REFRESH_INTERVAL: 3600
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config/feeds:/app/feeds
+    networks:
+      - cybernest-net
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: cybernest-dashboard
+    restart: unless-stopped
+    networks:
+      - cybernest-net
+
+  nginx:
+    image: nginx:alpine
+    container_name: cybernest-nginx
+    restart: unless-stopped
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./infrastructure/nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - manager
+      - dashboard
+    networks:
+      - cybernest-net
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
 volumes:
-  cybernest-data:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  kafka_data:
+    driver: local
+  zookeeper_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+  parser_data:
+    driver: local
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  cybernest-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

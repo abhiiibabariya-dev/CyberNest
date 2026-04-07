@@ -1,0 +1,103 @@
+# CyberNest Agent Configuration
+# ─────────────────────────────
+
+manager:
+  host: "localhost"
+  port: 8000
+  protocol: "https"
+  api_path: "/api/v1"
+  verify_ssl: true
+
+agent:
+  id: ""  # Auto-generated on first run
+  group: "default"
+  labels:
+    environment: "production"
+  heartbeat_interval: 30  # seconds
+  buffer_size: 10000  # max events in local queue
+  batch_size: 100  # events per API call
+  log_level: "INFO"
+
+# Log collection sources
+collectors:
+  windows_event_log:
+    enabled: true
+    channels:
+      - Security
+      - System
+      - Application
+      - "Microsoft-Windows-PowerShell/Operational"
+      - "Microsoft-Windows-Sysmon/Operational"
+    event_ids: []  # Empty = collect all
+    poll_interval: 1  # seconds
+
+  linux_logs:
+    enabled: true
+    paths:
+      - /var/log/syslog
+      - /var/log/auth.log
+      - /var/log/kern.log
+      - /var/log/audit/audit.log
+      - /var/log/secure
+      - /var/log/messages
+    poll_interval: 1
+
+  custom_logs:
+    enabled: false
+    paths: []
+    # - /var/log/nginx/access.log
+    # - /var/log/apache2/access.log
+    # - /opt/app/logs/*.log
+
+# Monitors
+monitors:
+  file_integrity:
+    enabled: true
+    paths:
+      - /etc
+      - /usr/bin
+      - /usr/sbin
+      - "C:\\Windows\\System32"
+      - "C:\\Windows\\SysWOW64"
+    exclude:
+      - "*.tmp"
+      - "*.log"
+    scan_interval: 300  # seconds
+    detect: [create, modify, delete, permission_change]
+
+  process_monitor:
+    enabled: true
+    scan_interval: 10  # seconds
+    alert_on_new: true
+    suspicious_names:
+      - mimikatz
+      - psexec
+      - procdump
+      - netcat
+      - ncat
+      - nc
+
+  network_monitor:
+    enabled: true
+    scan_interval: 15
+    alert_on_new_listeners: true
+    alert_on_suspicious_ports:
+      - 4444
+      - 5555
+      - 8443
+      - 1337
+      - 31337
+
+  registry_monitor:
+    enabled: true  # Windows only
+    keys:
+      - "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
+      - "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce"
+      - "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
+    scan_interval: 60
+
+# Syslog receiver
+syslog_receiver:
+  enabled: false
+  udp_port: 1514
+  tcp_port: 1514

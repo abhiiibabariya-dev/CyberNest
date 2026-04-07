@@ -1,0 +1,104 @@
+title: New Service Installation
+id: sigma-new-service
+status: stable
+level: medium
+description: Detects new service installations which may indicate persistence
+logsource:
+  product: windows
+  service: system
+detection:
+  selection:
+    EventID: 7045
+  condition: selection
+tags:
+  - attack.persistence
+  - attack.t1543.003
+falsepositives:
+  - Legitimate software installation
+
+---
+
+title: Scheduled Task Created via CLI
+id: sigma-schtask
+status: stable
+level: high
+description: Detects scheduled task creation via command line
+logsource:
+  category: process_creation
+  product: windows
+detection:
+  selection:
+    CommandLine|contains:
+      - "schtasks /create"
+      - "schtasks.exe /create"
+  condition: selection
+tags:
+  - attack.persistence
+  - attack.t1053.005
+falsepositives:
+  - Admin automation scripts
+
+---
+
+title: Registry Run Key Modification
+id: sigma-run-key
+status: stable
+level: high
+description: Detects modifications to Run/RunOnce registry keys for persistence
+logsource:
+  category: registry_set
+  product: windows
+detection:
+  selection:
+    TargetObject|contains:
+      - "\\CurrentVersion\\Run"
+      - "\\CurrentVersion\\RunOnce"
+  condition: selection
+tags:
+  - attack.persistence
+  - attack.t1547.001
+falsepositives:
+  - Legitimate software autostart
+
+---
+
+title: WMI Event Subscription
+id: sigma-wmi-persist
+status: stable
+level: high
+description: Detects WMI event subscription for persistence
+logsource:
+  category: process_creation
+  product: windows
+detection:
+  selection:
+    CommandLine|contains:
+      - "__EventFilter"
+      - "__EventConsumer"
+      - "__FilterToConsumerBinding"
+  condition: selection
+tags:
+  - attack.persistence
+  - attack.t1546.003
+falsepositives:
+  - Legitimate monitoring solutions
+
+---
+
+title: Audit Log Cleared
+id: sigma-log-cleared
+status: stable
+level: high
+description: Detects clearing of Windows Security audit log
+logsource:
+  product: windows
+  service: security
+detection:
+  selection:
+    EventID: 1102
+  condition: selection
+tags:
+  - attack.defense_evasion
+  - attack.t1070.001
+falsepositives:
+  - Authorized log maintenance

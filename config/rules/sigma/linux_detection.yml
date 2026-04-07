@@ -1,0 +1,131 @@
+title: SSH Brute Force Attempt
+id: sigma-ssh-bruteforce
+status: stable
+level: high
+description: Detects SSH failed login attempts indicating brute force
+logsource:
+  product: linux
+  service: auth
+detection:
+  selection:
+    event.action: logon_failure
+    process.name: sshd
+  condition: selection
+tags:
+  - attack.credential_access
+  - attack.t1110.001
+falsepositives:
+  - User mistyping password
+
+---
+
+title: Reverse Shell Detected
+id: sigma-reverse-shell
+status: stable
+level: critical
+description: Detects common reverse shell patterns in process execution
+logsource:
+  product: linux
+  category: process_creation
+detection:
+  selection:
+    CommandLine|contains:
+      - "/dev/tcp/"
+      - "bash -i >"
+      - "nc -e /bin"
+      - "ncat -e /bin"
+      - "python -c 'import socket"
+      - "python3 -c 'import socket"
+      - "perl -e 'use Socket"
+      - "php -r '$sock=fsockopen"
+      - "mkfifo /tmp/"
+  condition: selection
+tags:
+  - attack.execution
+  - attack.t1059
+falsepositives:
+  - Authorized penetration testing
+
+---
+
+title: Cron Persistence Mechanism
+id: sigma-cron-persist
+status: stable
+level: high
+description: Detects creation of crontab entries for persistence
+logsource:
+  product: linux
+  category: process_creation
+detection:
+  selection:
+    CommandLine|contains:
+      - "crontab -"
+      - "/etc/cron"
+      - "/var/spool/cron"
+  condition: selection
+tags:
+  - attack.persistence
+  - attack.t1053.003
+falsepositives:
+  - System administration tasks
+
+---
+
+title: Sudo Privilege Escalation
+id: sigma-sudo-privesc
+status: stable
+level: high
+description: Detects potential sudo-based privilege escalation
+logsource:
+  product: linux
+  service: auth
+detection:
+  selection:
+    event.action: sudo_executed
+    user.target.name: root
+  condition: selection
+tags:
+  - attack.privilege_escalation
+  - attack.t1548.003
+falsepositives:
+  - Normal admin operations
+
+---
+
+title: Suspicious Process in /tmp
+id: sigma-tmp-exec
+status: stable
+level: high
+description: Detects process execution from /tmp directory
+logsource:
+  product: linux
+  category: process_creation
+detection:
+  selection:
+    process.name|startswith: /tmp/
+  condition: selection
+tags:
+  - attack.execution
+  - attack.t1059
+falsepositives:
+  - Some legitimate installers use /tmp
+
+---
+
+title: User Account Created
+id: sigma-linux-useradd
+status: stable
+level: medium
+description: Detects creation of new user accounts on Linux
+logsource:
+  product: linux
+  service: auth
+detection:
+  selection:
+    event.action: user_created
+  condition: selection
+tags:
+  - attack.persistence
+  - attack.t1136.001
+falsepositives:
+  - Legitimate user provisioning
