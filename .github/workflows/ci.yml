@@ -1,0 +1,124 @@
+name: CyberNest CI
+
+on:
+  push:
+    branches: [master, main, develop]
+  pull_request:
+    branches: [master, main]
+
+env:
+  PYTHON_VERSION: "3.13"
+  NODE_VERSION: "20"
+
+jobs:
+  # ─── Python Linting & Type Checking ───
+  lint-python:
+    name: Python Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install ruff mypy
+      - name: Ruff lint (all services)
+        run: ruff check services/ agent/ --select=E,W,F --ignore=E501
+      - name: Ruff format check
+        run: ruff format --check services/ agent/
+
+  # ─── Python Tests ───
+  test-python:
+    name: Python Tests
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 10s
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: cybernest_test
+          POSTGRES_USER: cybernest
+          POSTGRES_PASSWORD: test_secret
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 10s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install dependencies
+        run: |
+          pip install pytest pytest-asyncio httpx
+          pip install -r services/manager/requirements.txt
+          pip install -r services/parser/requirements.txt
+          pip install -r services/correlator/requirements.txt
+      - name: Run parser tests
+        run: python -m pytest tests/ -v --tb=short
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_DB: cybernest_test
+          POSTGRES_USER: cybernest
+          POSTGRES_PASSWORD: test_secret
+          REDIS_URL: redis://localhost:6379/0
+
+  # ─── Frontend Build ───
+  build-dashboard:
+    name: Dashboard Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install dependencies
+        working-directory: dashboard
+        run: npm install --legacy-peer-deps
+      - name: Type check
+        working-directory: dashboard
+        run: npx tsc --noEmit
+      - name: Build
+        working-directory: dashboard
+        run: npm run build
+
+  # ─── Docker Build ───
+  build-docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [lint-python, test-python, build-dashboard]
+    strategy:
+      matrix:
+        service:
+          - services/manager
+          - services/parser
+          - services/correlator
+          - services/alert_manager
+          - services/soar
+          - services/indexer
+          - services/threat_intel
+          - services/ueba
+          - dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t cybernest-$(basename ${{ matrix.service }}) ${{ matrix.service }}
+
+  # ─── Security Scan ───
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install bandit safety
+      - name: Bandit security scan
+        run: bandit -r services/ agent/ -ll --skip B101,B603 -f json -o bandit-report.json || true
+      - name: Safety dependency check
+        run: |
+          for req in services/*/requirements.txt; do
+            echo "Checking $req..."
+            safety check -r "$req" --output text || true
+          done
