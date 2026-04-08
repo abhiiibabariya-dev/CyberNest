@@ -1,11 +1,15 @@
-"""CyberNest Manager — Configuration loaded from environment variables.
+"""
+CyberNest Manager -- Configuration loaded from environment variables.
 
-All secrets and connection strings come from env vars — never hardcoded.
+All secrets and connection strings come from env vars -- never hardcoded.
 Uses Pydantic BaseSettings for type-safe config with validation.
 """
 
-from pydantic_settings import BaseSettings
+from __future__ import annotations
+
 from functools import lru_cache
+
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -38,6 +42,7 @@ class Settings(BaseSettings):
     JWT_SECRET: str = "change_me_in_production_64chars_min"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 480
+    JWT_REFRESH_EXPIRE_MINUTES: int = 10080  # 7 days
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -47,6 +52,8 @@ class Settings(BaseSettings):
 
     # Elasticsearch
     ES_URL: str = "http://localhost:9200"
+    ES_INDEX_EVENTS: str = "cybernest-events-*"
+    ES_INDEX_ALERTS: str = "cybernest-alerts-*"
 
     # Receivers
     SYSLOG_UDP_PORT: int = 514
@@ -55,6 +62,14 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: str = "*"
+
+    # Rate limiting
+    RATE_LIMIT_DEFAULT: int = 1000  # requests per minute per user
+    RATE_LIMIT_AUTH: int = 10  # requests per minute on /auth/login by IP
+
+    # File uploads
+    UPLOAD_DIR: str = "/data/attachments"
+    MAX_UPLOAD_SIZE: int = 52_428_800  # 50 MB
 
     model_config = {"env_prefix": "", "case_sensitive": True}
 

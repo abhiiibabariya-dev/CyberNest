@@ -1,0 +1,7 @@
+aiohttp==3.11.16
+asyncpg==0.30.0
+redis[hiredis]==5.2.1
+structlog==25.2.0
+pydantic==2.11.3
+pydantic-settings==2.8.1
+python-dateutil==2.9.0

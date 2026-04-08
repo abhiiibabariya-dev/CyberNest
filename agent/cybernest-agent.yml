@@ -1,0 +1,151 @@
+# =============================================================================
+# CyberNest Agent Configuration
+# =============================================================================
+# All settings are documented inline.  Copy this file and customise for your
+# environment.  The agent looks for cybernest-agent.yml next to cybernest_agent.py
+# or pass --config /path/to/file.yml on the command line.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Manager connection
+# ---------------------------------------------------------------------------
+manager:
+  host: "localhost"                    # Manager hostname or IP
+  port: 8443                           # Manager port (WebSocket + REST)
+  api_key: ""                          # Pre-shared key (leave empty for auto-enrollment)
+
+  tls:
+    enabled: true                      # Use wss:// and https://
+    verify: true                       # Verify server certificate
+    ca_cert: ""                        # Path to CA certificate (PEM)
+    client_cert: ""                    # Path to agent client certificate (PEM)
+    client_key: ""                     # Path to agent client private key (PEM)
+
+# ---------------------------------------------------------------------------
+# Agent settings
+# ---------------------------------------------------------------------------
+agent:
+  group: "default"                     # Agent group for policy assignment
+  labels:                              # Arbitrary labels for filtering
+    environment: "production"
+    role: "server"
+  state_dir: "./data"                  # Directory for state files and buffers
+  dedup_cache_size: 1000               # SHA-256 LRU cache entries for dedup
+
+# ---------------------------------------------------------------------------
+# Forwarder settings (WebSocket event transport)
+# ---------------------------------------------------------------------------
+forwarder:
+  batch_size: 50                       # Max events per WebSocket message
+  flush_interval: 1.0                  # Seconds; flush partial batch after this
+  queue_maxsize: 10000                 # In-memory event queue capacity
+  buffer_file: "event_buffer.jsonl"    # Offline buffer (relative to state_dir)
+  reconnect_base: 1.0                  # Initial reconnect delay (seconds)
+  reconnect_max: 60.0                  # Maximum reconnect delay (seconds)
+  heartbeat_interval: 30.0             # Heartbeat period (seconds)
+
+# ---------------------------------------------------------------------------
+# Collectors
+# ---------------------------------------------------------------------------
+collectors:
+
+  # -- Linux syslog (watchdog-based file tailing) ---------------------------
+  linux_syslog:
+    enabled: true                      # Auto-disabled if not on Linux
+    paths:
+      - /var/log/syslog
+      - /var/log/auth.log
+      - /var/log/kern.log
+      - /var/log/messages
+      - /var/log/secure
+    poll_interval: 1.0                 # Fallback poll if watchdog misses
+
+  # -- Windows Event Log (pywin32 EvtQuery) ---------------------------------
+  windows_event:
+    enabled: true                      # Auto-disabled if not on Windows
+    channels:
+      - Security
+      - System
+      - Application
+      - "Microsoft-Windows-PowerShell/Operational"
+      - "Microsoft-Windows-Sysmon/Operational"
+    poll_interval: 1.0                 # Seconds between queries
+    batch_size: 100                    # Events per EvtNext call
+
+  # -- macOS unified log (log stream --style json) --------------------------
+  macos_log:
+    enabled: true                      # Auto-disabled if not on macOS
+    subsystems:                        # Empty list = all subsystems
+      - "com.apple.authd"
+      - "com.apple.securityd"
+      - "com.apple.kernel"
+      - "com.apple.launchd"
+    levels:
+      - "default"
+      - "info"
+      - "debug"
+    predicate: ""                      # Raw predicate (overrides subsystems)
+
+  # -- File Integrity Monitoring (watchdog real-time) -----------------------
+  fim:
+    enabled: true
+    paths:                             # Directories/files to watch
+      - /etc
+      - /usr/bin
+      - /usr/sbin
+      - "C:\\Windows\\System32\\drivers\\etc"
+      - "C:\\Windows\\System32\\config"
+    excludes:                          # Glob patterns to ignore
+      - "*.tmp"
+      - "*.swp"
+      - "*.log"
+      - "~*"
+      - "*.pyc"
+      - "__pycache__"
+    recursive: true                    # Watch subdirectories
+    hash_on_change: true               # Compute SHA-256 on create/modify
+    max_hash_size_mb: 100              # Skip hashing files larger than this
+
+  # -- Process Monitor (psutil polling) -------------------------------------
+  process_monitor:
+    enabled: true
+    interval: 5.0                      # Seconds between polls
+    hash_executables: true             # SHA-256 of exe on first seen
+    max_hash_size_mb: 50               # Skip hashing binaries larger than this
+
+  # -- Network Monitor (psutil polling) -------------------------------------
+  network_monitor:
+    enabled: true
+    interval: 5.0                      # Seconds between polls
+    track_established: true            # Alert on new outbound connections
+    track_listeners: true              # Alert on new listening ports
+    alert_ports:                       # Ports that trigger alert-level events
+      - 4444
+      - 5555
+      - 1337
+      - 31337
+      - 8443
+      - 9001
+      - 6666
+      - 6667
+
+  # -- Registry Monitor (Windows only, winreg polling) ----------------------
+  registry_monitor:
+    enabled: true                      # Auto-disabled if not on Windows
+    interval: 30.0                     # Seconds between scans
+    monitor_services: true             # Track new service subkeys
+    keys:
+      - "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
+      - "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce"
+      - "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"
+      - "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce"
+      - "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer\\Run"
+      - "HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer\\Run"
+      - "HKLM\\SYSTEM\\CurrentControlSet\\Services"
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+logging:
+  level: "INFO"                        # DEBUG, INFO, WARNING, ERROR
+  file: ""                             # Log to file (empty = stdout only)

@@ -1,11 +1,19 @@
-"""CyberNest Manager — Async SQLAlchemy database engine and session management.
+"""
+CyberNest Manager -- Async SQLAlchemy database engine and session management.
 
 Uses asyncpg driver for high-performance async PostgreSQL access.
 Connection pooling configured for production workloads.
 """
 
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from __future__ import annotations
+
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.orm import DeclarativeBase
+
 from manager.config import get_settings
 
 settings = get_settings()
@@ -20,7 +28,9 @@ engine = create_async_engine(
 )
 
 AsyncSessionLocal = async_sessionmaker(
-    engine, class_=AsyncSession, expire_on_commit=False,
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
 )
 
 
@@ -30,7 +40,7 @@ class Base(DeclarativeBase):
 
 
 async def get_db():
-    """FastAPI dependency — yields an async database session with auto-commit/rollback."""
+    """FastAPI dependency -- yields an async database session with auto-commit/rollback."""
     async with AsyncSessionLocal() as session:
         try:
             yield session

@@ -1,0 +1,165 @@
+rules:
+  - id: CN-LNX-PERS-001
+    name: Crontab Modified
+    description: A crontab file was created or modified, which could be used to establish persistence through scheduled task execution.
+    level: medium
+    category: persistence
+    mitre_tactic: TA0003
+    mitre_technique:
+      - T1053.003
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: file.path
+          operator: regex
+          value: (?i)(/var/spool/cron|/etc/cron\.|/etc/crontab)
+        - field: event.action
+          operator: in
+          value:
+            - created
+            - modified
+            - renamed
+            - changed
+            - file-write
+        - field: host.os.platform
+          operator: equals
+          value: linux
+
+  - id: CN-LNX-PERS-002
+    name: New Systemd Service Created
+    description: A new systemd service unit file was created, which may be used to establish persistent execution on system boot.
+    level: high
+    category: persistence
+    mitre_tactic: TA0003
+    mitre_technique:
+      - T1543.002
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: file.path
+          operator: regex
+          value: (?i)(/etc/systemd/system/|/usr/lib/systemd/system/).*\.service$
+        - field: event.action
+          operator: in
+          value:
+            - created
+            - modified
+            - file-write
+        - field: host.os.platform
+          operator: equals
+          value: linux
+
+  - id: CN-LNX-PERS-003
+    name: SSH Authorized Keys Modified
+    description: The SSH authorized_keys file was modified, potentially to add an attacker-controlled public key for persistent access.
+    level: high
+    category: persistence
+    mitre_tactic: TA0003
+    mitre_technique:
+      - T1098.004
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: file.path
+          operator: contains
+          value: .ssh/authorized_keys
+        - field: event.action
+          operator: in
+          value:
+            - created
+            - modified
+            - file-write
+            - changed
+        - field: host.os.platform
+          operator: equals
+          value: linux
+
+  - id: CN-LNX-PERS-004
+    name: /etc/passwd File Modified
+    description: The /etc/passwd file was modified, potentially to add a new user account or modify existing account properties for persistence.
+    level: critical
+    category: persistence
+    mitre_tactic: TA0003
+    mitre_technique:
+      - T1136.001
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: file.path
+          operator: equals
+          value: /etc/passwd
+        - field: event.action
+          operator: in
+          value:
+            - modified
+            - file-write
+            - changed
+        - field: host.os.platform
+          operator: equals
+          value: linux
+
+  - id: CN-LNX-PERS-005
+    name: New User Account Added on Linux
+    description: A new user account was added to a Linux system via useradd or adduser, which should be verified as authorized.
+    level: medium
+    category: persistence
+    mitre_tactic: TA0003
+    mitre_technique:
+      - T1136.001
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: process.name
+          operator: in
+          value:
+            - useradd
+            - adduser
+        - field: event.category
+          operator: contains
+          value: iam
+        - field: host.os.platform
+          operator: equals
+          value: linux
+
+  - id: CN-LNX-PERS-006
+    name: Execution from Tmp or Dev Shm
+    description: A process was executed from /tmp or /dev/shm, which are commonly used as staging directories for malware on Linux systems.
+    level: high
+    category: persistence
+    mitre_tactic: TA0002
+    mitre_technique:
+      - T1059
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: process.executable
+          operator: regex
+          value: ^/(tmp|dev/shm)/
+        - field: host.os.platform
+          operator: equals
+          value: linux
+
+  - id: CN-LNX-PERS-007
+    name: Reverse Shell Indicators Detected
+    description: Process execution patterns indicative of a reverse shell connection were detected, such as bash redirecting to a network socket.
+    level: critical
+    category: persistence
+    mitre_tactic: TA0002
+    mitre_technique:
+      - T1059.004
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: process.command_line
+          operator: regex
+          value: (?i)(bash\s+-i\s+>&\s+/dev/tcp|nc\s+-e\s+/bin/(ba)?sh|python.*socket.*connect|perl.*socket.*INET|ruby.*TCPSocket|php.*fsockopen|mkfifo.*nc|ncat\s+-e|socat.*exec)
+        - field: host.os.platform
+          operator: equals
+          value: linux

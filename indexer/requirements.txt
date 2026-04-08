@@ -1,0 +1,5 @@
+aiokafka==0.11.0
+elasticsearch[async]==8.17.2
+structlog==25.2.0
+pydantic==2.11.3
+pydantic-settings==2.8.1

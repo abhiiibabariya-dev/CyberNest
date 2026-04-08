@@ -1,103 +1,145 @@
-"""CyberNest — Cryptographic utilities for TLS cert management and hashing.
-
-Used by the agent enrollment process and inter-service TLS communication.
 """
+CyberNest Cryptographic Utilities.
+
+Provides password hashing (bcrypt), JWT token creation/verification
+(python-jose with HS256), and API key generation/hashing for agent
+authentication and inter-service communication.
+
+Usage:
+    from shared.utils.crypto import (
+        hash_password, verify_password,
+        create_jwt_token, decode_jwt_token,
+        generate_api_key, hash_api_key,
+    )
+"""
+
+from __future__ import annotations
 
 import hashlib
 import secrets
-import subprocess
-import os
-from pathlib import Path
+from datetime import datetime, timedelta, timezone
+from typing import Any
 
-from shared.utils.logger import get_logger
-
-logger = get_logger(__name__)
+import bcrypt
+from jose import ExpiredSignatureError, JWTError, jwt
 
 
-def generate_api_key() -> tuple[str, str]:
-    """Generate a random API key and its SHA-256 hash.
+# ---------------------------------------------------------------------------
+# Password hashing (bcrypt)
+# ---------------------------------------------------------------------------
+
+def hash_password(password: str) -> str:
+    """Hash a plaintext password using bcrypt.
+
+    Args:
+        password: The plaintext password to hash.
 
     Returns:
-        Tuple of (plaintext_key, sha256_hash) — store only the hash in DB.
+        The bcrypt hash string (includes salt, algorithm, and cost factor).
     """
-    key = secrets.token_urlsafe(48)
-    key_hash = hashlib.sha256(key.encode()).hexdigest()
-    return key, key_hash
+    salt = bcrypt.gensalt(rounds=12)
+    hashed = bcrypt.hashpw(password.encode("utf-8"), salt)
+    return hashed.decode("utf-8")
+
+
+def verify_password(password: str, hashed: str) -> bool:
+    """Verify a plaintext password against a bcrypt hash.
+
+    Args:
+        password: The plaintext password to check.
+        hashed: The bcrypt hash string to check against.
+
+    Returns:
+        True if the password matches, False otherwise.
+    """
+    try:
+        return bcrypt.checkpw(
+            password.encode("utf-8"),
+            hashed.encode("utf-8"),
+        )
+    except (ValueError, TypeError):
+        return False
+
+
+# ---------------------------------------------------------------------------
+# JWT tokens (python-jose, HS256)
+# ---------------------------------------------------------------------------
+
+def create_jwt_token(
+    data: dict[str, Any],
+    secret: str,
+    expires_minutes: int = 60,
+) -> str:
+    """Create a signed JWT token with HS256.
+
+    The token payload includes:
+    - All key-value pairs from ``data``
+    - ``sub``: set to data["sub"] if present, else ""
+    - ``iat``: issued-at timestamp (UTC)
+    - ``exp``: expiration timestamp (UTC, now + expires_minutes)
+
+    Args:
+        data: Claims to embed in the token payload.
+        secret: HMAC secret key for signing.
+        expires_minutes: Token lifetime in minutes (default 60).
+
+    Returns:
+        Encoded JWT string.
+    """
+    now = datetime.now(timezone.utc)
+    payload = {
+        **data,
+        "sub": data.get("sub", ""),
+        "iat": now,
+        "exp": now + timedelta(minutes=expires_minutes),
+    }
+    return jwt.encode(payload, secret, algorithm="HS256")
+
+
+def decode_jwt_token(token: str, secret: str) -> dict[str, Any]:
+    """Decode and verify a JWT token.
+
+    Verifies the signature and checks that the token has not expired.
+
+    Args:
+        token: The encoded JWT string.
+        secret: HMAC secret key used during signing.
+
+    Returns:
+        The decoded payload as a dict.
+
+    Raises:
+        ExpiredSignatureError: If the token has expired.
+        JWTError: If the token is invalid or signature verification fails.
+    """
+    return jwt.decode(
+        token,
+        secret,
+        algorithms=["HS256"],
+        options={"verify_exp": True},
+    )
+
+
+# ---------------------------------------------------------------------------
+# API key generation and hashing
+# ---------------------------------------------------------------------------
+
+def generate_api_key() -> str:
+    """Generate a cryptographically secure API key.
+
+    Returns:
+        A 32-byte (64 hex character) random token string.
+    """
+    return secrets.token_hex(32)
 
 
 def hash_api_key(key: str) -> str:
-    """Hash an API key with SHA-256 for database storage."""
-    return hashlib.sha256(key.encode()).hexdigest()
-
-
-def generate_ca_cert(output_dir: str = "/etc/cybernest/ssl") -> tuple[str, str]:
-    """Generate a self-signed CA certificate and private key.
+    """Hash an API key with SHA-256 for secure database storage.
 
     Args:
-        output_dir: Directory to write ca.crt and ca.key.
+        key: The plaintext API key.
 
     Returns:
-        Tuple of (ca_cert_path, ca_key_path).
+        Hex-encoded SHA-256 hash of the key.
     """
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
-    ca_key = os.path.join(output_dir, "ca.key")
-    ca_cert = os.path.join(output_dir, "ca.crt")
-
-    # Generate CA private key
-    subprocess.run([
-        "openssl", "genrsa", "-out", ca_key, "4096"
-    ], check=True, capture_output=True)
-
-    # Generate self-signed CA certificate
-    subprocess.run([
-        "openssl", "req", "-x509", "-new", "-nodes",
-        "-key", ca_key, "-sha256", "-days", "3650",
-        "-out", ca_cert,
-        "-subj", "/C=US/ST=Security/L=SOC/O=CyberNest/CN=CyberNest CA"
-    ], check=True, capture_output=True)
-
-    logger.info("CA certificate generated", extra={"event": "ca_cert_generated"})
-    return ca_cert, ca_key
-
-
-def generate_server_cert(
-    ca_cert: str, ca_key: str,
-    hostname: str = "cybernest-manager",
-    output_dir: str = "/etc/cybernest/ssl"
-) -> tuple[str, str]:
-    """Generate a server certificate signed by the CA.
-
-    Args:
-        ca_cert: Path to CA certificate.
-        ca_key: Path to CA private key.
-        hostname: Server hostname for the CN and SAN.
-        output_dir: Directory to write server.crt and server.key.
-
-    Returns:
-        Tuple of (server_cert_path, server_key_path).
-    """
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
-    srv_key = os.path.join(output_dir, "server.key")
-    srv_csr = os.path.join(output_dir, "server.csr")
-    srv_cert = os.path.join(output_dir, "server.crt")
-
-    # Generate server key
-    subprocess.run(["openssl", "genrsa", "-out", srv_key, "2048"],
-                   check=True, capture_output=True)
-
-    # Generate CSR
-    subprocess.run([
-        "openssl", "req", "-new", "-key", srv_key, "-out", srv_csr,
-        "-subj", f"/C=US/ST=Security/O=CyberNest/CN={hostname}"
-    ], check=True, capture_output=True)
-
-    # Sign with CA
-    subprocess.run([
-        "openssl", "x509", "-req", "-in", srv_csr,
-        "-CA", ca_cert, "-CAkey", ca_key, "-CAcreateserial",
-        "-out", srv_cert, "-days", "365", "-sha256"
-    ], check=True, capture_output=True)
-
-    os.remove(srv_csr)
-    logger.info("Server certificate generated", extra={"event": "server_cert_generated"})
-    return srv_cert, srv_key
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()

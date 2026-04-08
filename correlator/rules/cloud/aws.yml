@@ -1,0 +1,151 @@
+rules:
+  - id: CN-CLD-AWS-001
+    name: AWS Root Account Login
+    description: The AWS root account was used to sign in to the console. Root account usage should be avoided in favor of IAM users with least-privilege policies.
+    level: critical
+    category: cloud
+    mitre_tactic: TA0001
+    mitre_technique:
+      - T1078.004
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: cloud.provider
+          operator: equals
+          value: aws
+        - field: event.action
+          operator: in
+          value:
+            - ConsoleLogin
+            - AssumeRoot
+        - field: user.name
+          operator: in
+          value:
+            - root
+            - Root
+            - AWS ROOT USER
+
+  - id: CN-CLD-AWS-002
+    name: New IAM User Created
+    description: A new IAM user was created in the AWS account. Verify this was an authorized administrative action.
+    level: medium
+    category: cloud
+    mitre_tactic: TA0003
+    mitre_technique:
+      - T1136.003
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: cloud.provider
+          operator: equals
+          value: aws
+        - field: event.action
+          operator: equals
+          value: CreateUser
+        - field: event.outcome
+          operator: equals
+          value: success
+
+  - id: CN-CLD-AWS-003
+    name: S3 Bucket Made Public
+    description: An S3 bucket ACL or policy was changed to allow public access, potentially exposing sensitive data to the internet.
+    level: critical
+    category: cloud
+    mitre_tactic: TA0010
+    mitre_technique:
+      - T1537
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: cloud.provider
+          operator: equals
+          value: aws
+        - field: event.action
+          operator: in
+          value:
+            - PutBucketAcl
+            - PutBucketPolicy
+            - PutBucketPublicAccessBlock
+            - DeleteBucketPublicAccessBlock
+        - field: message
+          operator: regex
+          value: (?i)(public-read|public-read-write|\*.*Allow|AllUsers|AuthenticatedUsers)
+
+  - id: CN-CLD-AWS-004
+    name: Security Group Opened to 0.0.0.0/0
+    description: A security group inbound rule was created or modified to allow traffic from any IP address (0.0.0.0/0), exposing resources to the entire internet.
+    level: high
+    category: cloud
+    mitre_tactic: TA0005
+    mitre_technique:
+      - T1562.007
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: cloud.provider
+          operator: equals
+          value: aws
+        - field: event.action
+          operator: in
+          value:
+            - AuthorizeSecurityGroupIngress
+            - ModifySecurityGroupRules
+        - field: message
+          operator: contains
+          value: "0.0.0.0/0"
+
+  - id: CN-CLD-AWS-005
+    name: CloudTrail Logging Disabled
+    description: AWS CloudTrail logging was stopped or deleted, which eliminates visibility into API activity and is a critical defense evasion technique.
+    level: critical
+    category: cloud
+    mitre_tactic: TA0005
+    mitre_technique:
+      - T1562.008
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: cloud.provider
+          operator: equals
+          value: aws
+        - field: event.action
+          operator: in
+          value:
+            - StopLogging
+            - DeleteTrail
+            - UpdateTrail
+        - field: event.outcome
+          operator: equals
+          value: success
+
+  - id: CN-CLD-AWS-006
+    name: Mass Resource Deletion in AWS
+    description: Multiple AWS resources were deleted in a short period, potentially indicating an insider threat, compromised credentials, or destructive attack.
+    level: critical
+    category: cloud
+    mitre_tactic: TA0040
+    mitre_technique:
+      - T1485
+      - T1531
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: cloud.provider
+          operator: equals
+          value: aws
+        - field: event.action
+          operator: regex
+          value: (?i)(Delete|Terminate|Remove)
+        - field: event.outcome
+          operator: equals
+          value: success
+    threshold:
+      field: user.name
+      count: 10
+      timeframe: 300
