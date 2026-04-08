@@ -184,8 +184,7 @@ services:
 
   cybernest-manager:
     build:
-      context: ./manager
-      dockerfile: Dockerfile
+      context: .`r`n      dockerfile: manager/Dockerfile
     container_name: cybernest-manager
     restart: unless-stopped
     depends_on:
@@ -208,7 +207,7 @@ services:
       JWT_REFRESH_TOKEN_EXPIRES: ${JWT_REFRESH_TOKEN_EXPIRES:-86400}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:5000/api/health || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:5000/health || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -218,11 +217,10 @@ services:
 
   cybernest-syslog:
     build:
-      context: ./manager
-      dockerfile: Dockerfile
+      context: .`r`n      dockerfile: manager/Dockerfile
     container_name: cybernest-syslog
     restart: unless-stopped
-    command: python receiver/syslog_receiver.py
+    command: python -m manager.receiver.syslog_receiver
     depends_on:
       kafka:
         condition: service_healthy
@@ -242,8 +240,7 @@ services:
 
   cybernest-parser:
     build:
-      context: ./parser
-      dockerfile: Dockerfile
+      context: .`r`n      dockerfile: parser/Dockerfile
     container_name: cybernest-parser
     restart: unless-stopped
     depends_on:
@@ -270,8 +267,7 @@ services:
 
   cybernest-correlator:
     build:
-      context: ./correlator
-      dockerfile: Dockerfile
+      context: .`r`n      dockerfile: correlator/Dockerfile
     container_name: cybernest-correlator
     restart: unless-stopped
     depends_on:
@@ -296,8 +292,7 @@ services:
 
   cybernest-alert-manager:
     build:
-      context: ./alert_manager
-      dockerfile: Dockerfile
+      context: .`r`n      dockerfile: alert_manager/Dockerfile
     container_name: cybernest-alert-manager
     restart: unless-stopped
     depends_on:
@@ -328,8 +323,7 @@ services:
 
   cybernest-soar:
     build:
-      context: ./soar
-      dockerfile: Dockerfile
+      context: .`r`n      dockerfile: soar/Dockerfile
     container_name: cybernest-soar
     restart: unless-stopped
     depends_on:
@@ -354,8 +348,7 @@ services:
 
   cybernest-indexer:
     build:
-      context: ./indexer
-      dockerfile: Dockerfile
+      context: .`r`n      dockerfile: indexer/Dockerfile
     container_name: cybernest-indexer
     restart: unless-stopped
     depends_on:
@@ -381,8 +374,7 @@ services:
 
   cybernest-threat-intel:
     build:
-      context: ./threat_intel
-      dockerfile: Dockerfile
+      context: .`r`n      dockerfile: threat_intel/Dockerfile
     container_name: cybernest-threat-intel
     restart: unless-stopped
     depends_on:
@@ -467,3 +459,4 @@ networks:
   cybernest:
     driver: bridge
     name: cybernest-network
+
