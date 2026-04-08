@@ -1,0 +1,11 @@
+aiohttp==3.11.16
+asyncpg==0.30.0
+redis[hiredis]==5.2.1
+pyyaml==6.0.2
+jinja2==3.1.6
+aiokafka==0.11.0
+structlog==25.2.0
+pydantic==2.11.3
+pydantic-settings==2.8.1
+ldap3==2.9.1
+python-whois==0.9.5

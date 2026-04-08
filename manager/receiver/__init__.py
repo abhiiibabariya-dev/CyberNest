@@ -1,0 +1,1 @@
+"""CyberNest Manager -- Receiver package."""

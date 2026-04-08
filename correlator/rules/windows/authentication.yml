@@ -1,0 +1,254 @@
+rules:
+  - id: CN-WIN-AUTH-001
+    name: Single Failed Login Attempt
+    description: A single failed login attempt was detected on a Windows host. May indicate a typo or unauthorized access attempt.
+    level: informational
+    category: authentication
+    mitre_tactic: TA0006
+    mitre_technique:
+      - T1110
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: event.outcome
+          operator: equals
+          value: failure
+        - field: event.category
+          operator: contains
+          value: authentication
+        - field: host.os.platform
+          operator: equals
+          value: windows
+
+  - id: CN-WIN-AUTH-002
+    name: Brute Force Login Attempt
+    description: More than 5 failed login attempts from the same source IP within 60 seconds targeting a single user account on Windows.
+    level: high
+    category: authentication
+    mitre_tactic: TA0006
+    mitre_technique:
+      - T1110.001
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: event.outcome
+          operator: equals
+          value: failure
+        - field: event.category
+          operator: contains
+          value: authentication
+        - field: host.os.platform
+          operator: equals
+          value: windows
+    threshold:
+      field: user.name
+      count: 5
+      timeframe: 60
+
+  - id: CN-WIN-AUTH-003
+    name: Successful Login After Multiple Failures
+    description: A successful login occurred after multiple failed attempts for the same user, indicating a possible brute force success.
+    level: high
+    category: authentication
+    mitre_tactic: TA0006
+    mitre_technique:
+      - T1110
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: event.outcome
+          operator: equals
+          value: success
+        - field: event.category
+          operator: contains
+          value: authentication
+        - field: event.action
+          operator: in
+          value:
+            - logon
+            - logged-on
+            - 4624
+        - field: host.os.platform
+          operator: equals
+          value: windows
+
+  - id: CN-WIN-AUTH-004
+    name: Admin Login Outside Business Hours
+    description: An administrator account logged in outside of normal business hours (before 6 AM or after 10 PM), which may indicate compromised credentials.
+    level: medium
+    category: authentication
+    mitre_tactic: TA0001
+    mitre_technique:
+      - T1078.002
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: event.outcome
+          operator: equals
+          value: success
+        - field: event.category
+          operator: contains
+          value: authentication
+        - field: user.roles
+          operator: contains
+          value: admin
+        - field: host.os.platform
+          operator: equals
+          value: windows
+
+  - id: CN-WIN-AUTH-005
+    name: New User Account Created
+    description: A new user account was created on a Windows system. Verify that this was an authorized action.
+    level: medium
+    category: authentication
+    mitre_tactic: TA0003
+    mitre_technique:
+      - T1136.001
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: event.action
+          operator: in
+          value:
+            - user-account-created
+            - "4720"
+            - created-user
+        - field: event.category
+          operator: contains
+          value: iam
+        - field: host.os.platform
+          operator: equals
+          value: windows
+
+  - id: CN-WIN-AUTH-006
+    name: User Added to Administrators Group
+    description: A user was added to the local Administrators group on a Windows host, granting elevated privileges.
+    level: high
+    category: authentication
+    mitre_tactic: TA0004
+    mitre_technique:
+      - T1098
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: event.action
+          operator: in
+          value:
+            - added-member-to-group
+            - "4732"
+            - group-add
+        - field: user.target.group.name
+          operator: contains
+          value: Administrators
+        - field: host.os.platform
+          operator: equals
+          value: windows
+
+  - id: CN-WIN-AUTH-007
+    name: User Added to Domain Admins
+    description: A user was added to the Domain Admins group, which grants unrestricted access to the entire Active Directory domain.
+    level: critical
+    category: authentication
+    mitre_tactic: TA0004
+    mitre_technique:
+      - T1098
+      - T1078.002
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: event.action
+          operator: in
+          value:
+            - added-member-to-group
+            - "4728"
+            - "4756"
+            - group-add
+        - field: user.target.group.name
+          operator: contains
+          value: Domain Admins
+        - field: host.os.platform
+          operator: equals
+          value: windows
+
+  - id: CN-WIN-AUTH-008
+    name: Account Lockout
+    description: A Windows user account was locked out due to too many failed login attempts.
+    level: medium
+    category: authentication
+    mitre_tactic: TA0006
+    mitre_technique:
+      - T1110
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: event.action
+          operator: in
+          value:
+            - account-locked-out
+            - "4740"
+            - locked-out
+        - field: host.os.platform
+          operator: equals
+          value: windows
+
+  - id: CN-WIN-AUTH-009
+    name: Password Reset by Non-Admin User
+    description: A password was reset by a user who does not hold administrator privileges, which could indicate privilege abuse or social engineering.
+    level: medium
+    category: authentication
+    mitre_tactic: TA0006
+    mitre_technique:
+      - T1098
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: event.action
+          operator: in
+          value:
+            - password-reset
+            - "4724"
+            - reset-password
+        - field: user.roles
+          operator: not_contains
+          value: admin
+        - field: host.os.platform
+          operator: equals
+          value: windows
+
+  - id: CN-WIN-AUTH-010
+    name: Multiple Account Lockouts from Same Source
+    description: Multiple user account lockouts originated from the same source IP, indicating a likely password spray or brute force attack.
+    level: high
+    category: authentication
+    mitre_tactic: TA0006
+    mitre_technique:
+      - T1110.003
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: event.action
+          operator: in
+          value:
+            - account-locked-out
+            - "4740"
+            - locked-out
+        - field: source.ip
+          operator: exists
+          value: true
+        - field: host.os.platform
+          operator: equals
+          value: windows
+    threshold:
+      field: source.ip
+      count: 3
+      timeframe: 300

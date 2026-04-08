@@ -1,0 +1,72 @@
+{
+  "index_patterns": ["cybernest-alerts-*"],
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "index.lifecycle.name": "cybernest-ilm-policy",
+    "index.lifecycle.rollover_alias": "cybernest-alerts",
+    "index.refresh_interval": "1s",
+    "index.mapping.total_fields.limit": 2000
+  },
+  "mappings": {
+    "dynamic": "false",
+    "_source": { "enabled": true },
+    "properties": {
+      "@timestamp": { "type": "date" },
+      "alert_id": { "type": "keyword" },
+      "rule_id": { "type": "keyword" },
+      "rule_name": { "type": "text", "fields": { "keyword": { "type": "keyword", "ignore_above": 512 } } },
+      "severity": { "type": "keyword" },
+      "status": { "type": "keyword" },
+      "title": { "type": "text", "fields": { "keyword": { "type": "keyword", "ignore_above": 512 } } },
+      "description": { "type": "text" },
+      "source_ip": { "type": "ip" },
+      "destination_ip": { "type": "ip" },
+      "username": { "type": "keyword" },
+      "hostname": { "type": "keyword" },
+      "raw_log": { "type": "text" },
+      "parsed_event": { "type": "object", "enabled": false },
+      "event_ids": { "type": "keyword" },
+      "event_count": { "type": "long" },
+      "mitre_tactic": { "type": "keyword" },
+      "mitre_technique": { "type": "keyword" },
+      "risk_score": { "type": "float" },
+      "threat_intel": { "type": "object", "dynamic": true },
+      "geo_data": {
+        "properties": {
+          "city_name": { "type": "keyword" },
+          "country_name": { "type": "keyword" },
+          "country_iso_code": { "type": "keyword" },
+          "location": { "type": "geo_point" },
+          "region_name": { "type": "keyword" },
+          "timezone": { "type": "keyword" }
+        }
+      },
+      "asset_info": { "type": "object", "dynamic": true },
+      "assignee_id": { "type": "keyword" },
+      "incident_id": { "type": "keyword" },
+      "created_at": { "type": "date" },
+      "updated_at": { "type": "date" },
+      "acknowledged_at": { "type": "date" },
+      "resolved_at": { "type": "date" },
+      "time_to_detect_seconds": { "type": "float" },
+      "time_to_acknowledge_seconds": { "type": "float" },
+      "time_to_resolve_seconds": { "type": "float" },
+      "comments": {
+        "type": "nested",
+        "properties": {
+          "author": { "type": "keyword" },
+          "text": { "type": "text" },
+          "timestamp": { "type": "date" }
+        }
+      },
+      "enrichment": {
+        "properties": {
+          "ioc_matches": { "type": "object", "dynamic": true },
+          "asset_criticality": { "type": "keyword" },
+          "user_info": { "type": "object", "dynamic": true }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,141 @@
+rules:
+  - id: CN-NET-C2-001
+    name: Network Beaconing Pattern Detected
+    description: Regular periodic HTTP/HTTPS communication was detected between an internal host and an external IP, with low interval variance characteristic of C2 beaconing.
+    level: critical
+    category: command_and_control
+    mitre_tactic: TA0011
+    mitre_technique:
+      - T1071.001
+      - T1573
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: network.protocol
+          operator: in
+          value:
+            - http
+            - https
+        - field: network.direction
+          operator: in
+          value:
+            - outbound
+            - egress
+            - external
+        - field: destination.ip
+          operator: exists
+          value: true
+    threshold:
+      field: destination.ip
+      count: 20
+      timeframe: 3600
+
+  - id: CN-NET-C2-002
+    name: DNS Tunneling Detected
+    description: Unusually long DNS subdomain queries (over 50 characters) were detected at a high rate, indicating potential DNS tunneling for data exfiltration or C2 communication.
+    level: high
+    category: command_and_control
+    mitre_tactic: TA0011
+    mitre_technique:
+      - T1071.004
+      - T1048.003
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: dns.question.name
+          operator: exists
+          value: true
+        - field: network.protocol
+          operator: equals
+          value: dns
+    threshold:
+      field: source.ip
+      count: 10
+      timeframe: 60
+
+  - id: CN-NET-C2-003
+    name: Communication on Known C2 Port
+    description: Network traffic was detected on ports commonly used by command and control frameworks such as Cobalt Strike, Metasploit, or Empire.
+    level: high
+    category: command_and_control
+    mitre_tactic: TA0011
+    mitre_technique:
+      - T1571
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: destination.port
+          operator: in
+          value:
+            - "4444"
+            - "5555"
+            - "8443"
+            - "1337"
+            - "6666"
+            - "9999"
+            - "31337"
+            - "50050"
+            - "2222"
+        - field: network.direction
+          operator: in
+          value:
+            - outbound
+            - egress
+            - external
+
+  - id: CN-NET-C2-004
+    name: Large Outbound Data Transfer
+    description: An outbound data transfer exceeding 100 MB was detected from a single source, potentially indicating data exfiltration over a C2 channel.
+    level: high
+    category: command_and_control
+    mitre_tactic: TA0010
+    mitre_technique:
+      - T1048
+      - T1041
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: network.direction
+          operator: in
+          value:
+            - outbound
+            - egress
+            - external
+        - field: source.bytes
+          operator: gt
+          value: 104857600
+        - field: source.ip
+          operator: exists
+          value: true
+
+  - id: CN-NET-C2-005
+    name: HTTP POST to External IP Address
+    description: An HTTP POST request was sent directly to an external IP address rather than a domain name, which is commonly associated with C2 callback or data exfiltration.
+    level: medium
+    category: command_and_control
+    mitre_tactic: TA0011
+    mitre_technique:
+      - T1071.001
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: http.request.method
+          operator: equals
+          value: POST
+        - field: destination.ip
+          operator: exists
+          value: true
+        - field: destination.domain
+          operator: not_exists
+          value: true
+        - field: network.direction
+          operator: in
+          value:
+            - outbound
+            - egress
+            - external

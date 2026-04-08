@@ -6,8 +6,9 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 FROM python:3.13-slim
 WORKDIR /app
 COPY --from=builder /install /usr/local
-COPY . /app/
+COPY . /app/correlator/
 COPY ../shared /app/shared/
 RUN adduser --disabled-password --gecos "" cybernest && chown -R cybernest:cybernest /app
 USER cybernest
-CMD ["python", "-m", "app.main"]
+ENV PYTHONPATH=/app
+CMD ["python", "-m", "correlator.consumer"]

@@ -1,0 +1,164 @@
+rules:
+  - id: CN-WIN-PRIV-001
+    name: Token Impersonation Detected
+    description: A process performed token impersonation or duplication, which may indicate privilege escalation via stolen access tokens.
+    level: high
+    category: privilege_escalation
+    mitre_tactic: TA0004
+    mitre_technique:
+      - T1134.001
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: process.command_line
+          operator: regex
+          value: (?i)(impersonat|token.*duplicate|incognito|potato.*exe|juicypotato|sweetpotato|printspoofer)
+        - field: host.os.platform
+          operator: equals
+          value: windows
+
+  - id: CN-WIN-PRIV-002
+    name: Suspicious Service Installation
+    description: A new Windows service was installed with a suspicious binary path, potentially for privilege escalation or persistence.
+    level: high
+    category: privilege_escalation
+    mitre_tactic: TA0004
+    mitre_technique:
+      - T1543.003
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: event.action
+          operator: in
+          value:
+            - service-installed
+            - "7045"
+            - "4697"
+        - field: process.executable
+          operator: regex
+          value: (?i)(\\temp\\|\\appdata\\|\\public\\|cmd\.exe|powershell|\.tmp$)
+        - field: host.os.platform
+          operator: equals
+          value: windows
+
+  - id: CN-WIN-PRIV-003
+    name: Scheduled Task Created for Privilege Escalation
+    description: A scheduled task was created that runs with SYSTEM privileges or points to a suspicious executable path.
+    level: high
+    category: privilege_escalation
+    mitre_tactic: TA0004
+    mitre_technique:
+      - T1053.005
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: event.action
+          operator: in
+          value:
+            - scheduled-task-created
+            - "4698"
+            - task-created
+        - field: process.command_line
+          operator: regex
+          value: (?i)(schtasks|at\s+\d|/create.*(/sc|/tn|/tr))
+        - field: host.os.platform
+          operator: equals
+          value: windows
+
+  - id: CN-WIN-PRIV-004
+    name: At Job Created for Execution
+    description: A legacy at job was created, a technique often abused for scheduled privilege escalation or lateral movement.
+    level: medium
+    category: privilege_escalation
+    mitre_tactic: TA0004
+    mitre_technique:
+      - T1053.002
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: process.name
+          operator: equals
+          value: at.exe
+        - field: host.os.platform
+          operator: equals
+          value: windows
+
+  - id: CN-WIN-PRIV-005
+    name: WMI Event Subscription Created
+    description: A WMI permanent event subscription was created, which can be abused for persistence or privilege escalation via event-triggered execution.
+    level: high
+    category: privilege_escalation
+    mitre_tactic: TA0004
+    mitre_technique:
+      - T1546.003
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: event.action
+          operator: in
+          value:
+            - wmi-subscription
+            - wmi-event
+            - WmiEventFilter
+        - field: process.command_line
+          operator: regex
+          value: (?i)(wmic|__EventFilter|__EventConsumer|CommandLineEventConsumer|ActiveScriptEventConsumer)
+        - field: host.os.platform
+          operator: equals
+          value: windows
+
+  - id: CN-WIN-PRIV-006
+    name: AppLocker Bypass Attempt
+    description: A process execution pattern consistent with AppLocker bypass techniques was detected, such as using trusted Microsoft binaries to execute arbitrary code.
+    level: high
+    category: privilege_escalation
+    mitre_tactic: TA0005
+    mitre_technique:
+      - T1218
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: process.name
+          operator: in
+          value:
+            - msbuild.exe
+            - installutil.exe
+            - regsvcs.exe
+            - regasm.exe
+            - cmstp.exe
+            - msxsl.exe
+            - msiexec.exe
+        - field: process.parent.name
+          operator: not_in
+          value:
+            - explorer.exe
+            - svchost.exe
+            - services.exe
+        - field: host.os.platform
+          operator: equals
+          value: windows
+
+  - id: CN-WIN-PRIV-007
+    name: UAC Bypass Attempt Detected
+    description: A User Account Control bypass technique was detected, where a high-integrity process is spawned from a medium-integrity context without a UAC prompt.
+    level: high
+    category: privilege_escalation
+    mitre_tactic: TA0004
+    mitre_technique:
+      - T1548.002
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: process.command_line
+          operator: regex
+          value: (?i)(fodhelper|computerdefaults|sdclt|eventvwr|CompMgmtLauncher|DiskCleanup.*bypass|silentcleanup)
+        - field: host.os.platform
+          operator: equals
+          value: windows

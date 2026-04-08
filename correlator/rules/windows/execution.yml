@@ -1,0 +1,177 @@
+rules:
+  - id: CN-WIN-EXEC-001
+    name: Encoded PowerShell Command Detected
+    description: A PowerShell process was launched with a Base64-encoded command line, frequently used to obfuscate malicious payloads.
+    level: high
+    category: execution
+    mitre_tactic: TA0002
+    mitre_technique:
+      - T1059.001
+      - T1027
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: process.name
+          operator: in
+          value:
+            - powershell.exe
+            - pwsh.exe
+        - field: process.command_line
+          operator: regex
+          value: (?i)(-enc\s|-encodedcommand\s|-e\s+[A-Za-z0-9+/=]{20,})
+        - field: host.os.platform
+          operator: equals
+          value: windows
+
+  - id: CN-WIN-EXEC-002
+    name: PowerShell Download Cradle Detected
+    description: PowerShell was used with a download cradle pattern to fetch and execute remote code.
+    level: critical
+    category: execution
+    mitre_tactic: TA0002
+    mitre_technique:
+      - T1059.001
+      - T1105
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: process.name
+          operator: in
+          value:
+            - powershell.exe
+            - pwsh.exe
+        - field: process.command_line
+          operator: regex
+          value: (?i)(invoke-webrequest|iwr|wget|curl|downloadstring|downloadfile|invoke-expression|iex|net\.webclient|bitstransfer|start-bitstransfer|invoke-restmethod)
+        - field: host.os.platform
+          operator: equals
+          value: windows
+
+  - id: CN-WIN-EXEC-003
+    name: Malicious PowerShell Keywords Detected
+    description: PowerShell executed with command line arguments containing keywords commonly associated with offensive tools and malware.
+    level: high
+    category: execution
+    mitre_tactic: TA0002
+    mitre_technique:
+      - T1059.001
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: process.name
+          operator: in
+          value:
+            - powershell.exe
+            - pwsh.exe
+        - field: process.command_line
+          operator: regex
+          value: (?i)(invoke-mimikatz|invoke-shellcode|get-gpppassword|invoke-bloodhound|invoke-kerberoast|invoke-smbexec|invoke-wmiexec|invoke-psexec|invoke-dcomexec|powercat|nishang|empire|converto-securestring.*frombase64)
+        - field: host.os.platform
+          operator: equals
+          value: windows
+
+  - id: CN-WIN-EXEC-004
+    name: Suspicious WScript or CScript Execution
+    description: WScript or CScript was used to execute a script from a suspicious location, commonly abused for initial execution of malicious VBScript or JScript files.
+    level: medium
+    category: execution
+    mitre_tactic: TA0002
+    mitre_technique:
+      - T1059.005
+      - T1059.007
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: process.name
+          operator: in
+          value:
+            - wscript.exe
+            - cscript.exe
+        - field: process.command_line
+          operator: regex
+          value: (?i)(\\temp\\|\\appdata\\|\\downloads\\|\\public\\|\\users\\.*\\desktop\\)
+        - field: host.os.platform
+          operator: equals
+          value: windows
+
+  - id: CN-WIN-EXEC-005
+    name: MSHTA Executing External URL
+    description: MSHTA was used to execute content from an external URL, a common technique for downloading and executing malicious HTA files.
+    level: high
+    category: execution
+    mitre_tactic: TA0002
+    mitre_technique:
+      - T1218.005
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: process.name
+          operator: equals
+          value: mshta.exe
+        - field: process.command_line
+          operator: regex
+          value: (?i)(https?://|javascript:|vbscript:)
+        - field: host.os.platform
+          operator: equals
+          value: windows
+
+  - id: CN-WIN-EXEC-006
+    name: Process Spawned from Office Application
+    description: A child process was spawned from a Microsoft Office application, potentially indicating a macro-based attack or exploit.
+    level: high
+    category: execution
+    mitre_tactic: TA0002
+    mitre_technique:
+      - T1204.002
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: process.parent.name
+          operator: in
+          value:
+            - winword.exe
+            - excel.exe
+            - powerpnt.exe
+            - outlook.exe
+            - msaccess.exe
+            - mspub.exe
+            - visio.exe
+        - field: process.name
+          operator: in
+          value:
+            - cmd.exe
+            - powershell.exe
+            - pwsh.exe
+            - wscript.exe
+            - cscript.exe
+            - mshta.exe
+            - regsvr32.exe
+            - rundll32.exe
+        - field: host.os.platform
+          operator: equals
+          value: windows
+
+  - id: CN-WIN-EXEC-007
+    name: Execution from Temp or AppData Directory
+    description: A process was executed from the Temp or AppData directory, which is a common staging location for malware droppers and payloads.
+    level: medium
+    category: execution
+    mitre_tactic: TA0002
+    mitre_technique:
+      - T1204
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: process.executable
+          operator: regex
+          value: (?i)(\\temp\\|\\appdata\\local\\temp\\|\\appdata\\roaming\\).*\.(exe|dll|scr|bat|cmd|ps1|vbs|js)$
+        - field: host.os.platform
+          operator: equals
+          value: windows

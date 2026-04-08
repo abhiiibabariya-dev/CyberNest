@@ -1,0 +1,95 @@
+name: brute_force_response
+description: >
+  Automated response to brute-force login attempts. Enriches the source IP
+  with VirusTotal and AbuseIPDB, blocks if malicious, creates an investigation
+  case, and notifies the SOC team via Slack.
+enabled: true
+
+trigger:
+  rule_id: CN-AUTH-*
+  severity:
+    - high
+    - critical
+  category: authentication
+
+steps:
+  - name: vt_lookup
+    action: virustotal_lookup
+    input:
+      target: "{{ alert.source_ip }}"
+      type: ip
+    output: vt_result
+    condition: "alert.source_ip is not none and not is_internal(alert.source_ip)"
+    on_failure: continue
+    retry_count: 2
+    timeout: 30
+
+  - name: abuse_check
+    action: abuseipdb_lookup
+    input:
+      ip: "{{ alert.source_ip }}"
+      max_age_days: 90
+    output: abuse_result
+    condition: "alert.source_ip is not none and not is_internal(alert.source_ip)"
+    on_failure: continue
+    retry_count: 2
+    timeout: 30
+
+  - name: block_source_ip
+    action: firewall_block_ip
+    input:
+      ip: "{{ alert.source_ip }}"
+      duration: 86400
+      firewall_type: generic
+      reason: "Brute-force attack detected - Rule: {{ alert.rule_id }}"
+    output: block_result
+    condition: >
+      (vt_result.output.malicious | default(0)) > 0
+      or (abuse_result.output.score | default(0)) > 50
+    on_failure: continue
+    retry_count: 1
+    timeout: 30
+
+  - name: create_investigation_case
+    action: create_case
+    input:
+      title: "[Brute Force] {{ alert.title }}"
+      description: >
+        Brute-force login attempt detected from {{ alert.source_ip }}.
+        VT malicious: {{ vt_result.output.malicious | default('N/A') }},
+        AbuseIPDB score: {{ abuse_result.output.score | default('N/A') }}.
+        Target host: {{ alert.hostname | default('N/A') }},
+        Username: {{ alert.username | default('N/A') }}.
+      severity: "{{ alert.severity }}"
+      tags:
+        - brute-force
+        - authentication
+        - soar-automated
+    output: case_result
+    on_failure: continue
+    retry_count: 1
+    timeout: 15
+
+  - name: notify_soc
+    action: slack_notify
+    input:
+      message: >
+        *Brute Force Response Executed*
+
+        *Alert:* {{ alert.title }}
+        *Source IP:* {{ alert.source_ip }}
+        *Target:* {{ alert.hostname | default('N/A') }} / {{ alert.username | default('N/A') }}
+
+        *Enrichment:*
+        - VirusTotal: {{ vt_result.output.malicious | default('N/A') }} malicious detections
+        - AbuseIPDB Score: {{ abuse_result.output.score | default('N/A') }}
+
+        *Actions Taken:*
+        - IP Block: {{ block_result.output.message | default('Skipped (not malicious)') }}
+        - Case: {{ case_result.output.case_id | default('N/A') }}
+      title: "Brute Force Response - {{ alert.source_ip }}"
+      severity: "{{ alert.severity }}"
+      mention: "<!channel>"
+    output: slack_result
+    on_failure: continue
+    timeout: 15

@@ -1,0 +1,72 @@
+rules:
+  - id: CN-NET-DISC-001
+    name: Port Scan Detected
+    description: A single source IP contacted more than 20 unique destination ports within 30 seconds, characteristic of a port scan reconnaissance activity.
+    level: high
+    category: discovery
+    mitre_tactic: TA0007
+    mitre_technique:
+      - T1046
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: destination.port
+          operator: exists
+          value: true
+        - field: source.ip
+          operator: exists
+          value: true
+        - field: event.category
+          operator: contains
+          value: network
+    threshold:
+      field: source.ip
+      count: 20
+      timeframe: 30
+
+  - id: CN-NET-DISC-002
+    name: Host Sweep Detected
+    description: A single source IP attempted connections to more than 15 unique destination IPs within 60 seconds, indicating a network host discovery sweep.
+    level: high
+    category: discovery
+    mitre_tactic: TA0007
+    mitre_technique:
+      - T1018
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: destination.ip
+          operator: exists
+          value: true
+        - field: source.ip
+          operator: exists
+          value: true
+        - field: event.category
+          operator: contains
+          value: network
+    threshold:
+      field: source.ip
+      count: 15
+      timeframe: 60
+
+  - id: CN-NET-DISC-003
+    name: Vulnerability Scanner Traffic Pattern
+    description: Network traffic patterns consistent with known vulnerability scanners (Nessus, Qualys, OpenVAS, Nmap) were detected from an unrecognized source.
+    level: medium
+    category: discovery
+    mitre_tactic: TA0007
+    mitre_technique:
+      - T1046
+      - T1595.002
+    enabled: true
+    conditions:
+      logic: and
+      fields:
+        - field: message
+          operator: regex
+          value: (?i)(nessus|qualys|openvas|nmap|masscan|zmap|nuclei|nikto|acunetix)
+        - field: event.category
+          operator: contains
+          value: network

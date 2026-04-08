@@ -2,36 +2,139 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Base ────────────────────────────────────────────────────────────────── */
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: #0d1117;
+  color: #e6edf3;
 }
 
-/* Custom scrollbar */
+/* ─── Custom Scrollbar ────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #0a0e1a; }
-::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #475569; }
+::-webkit-scrollbar-track { background: #0d1117; }
+::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #484f58; }
 
-/* Severity badge colors */
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #30363d #0d1117;
+}
+
+/* ─── Severity Badges ─────────────────────────────────────────────────────── */
 .severity-critical { @apply bg-red-600/20 text-red-400 border border-red-600/30; }
 .severity-high { @apply bg-orange-600/20 text-orange-400 border border-orange-600/30; }
 .severity-medium { @apply bg-yellow-600/20 text-yellow-400 border border-yellow-600/30; }
 .severity-low { @apply bg-blue-600/20 text-blue-400 border border-blue-600/30; }
-.severity-info { @apply bg-gray-600/20 text-gray-400 border border-gray-600/30; }
+.severity-info,
+.severity-informational { @apply bg-gray-600/20 text-gray-400 border border-gray-600/30; }
 
-/* Status badges */
+/* ─── Status Badges ───────────────────────────────────────────────────────── */
 .status-new { @apply bg-red-500/20 text-red-400; }
 .status-acknowledged { @apply bg-yellow-500/20 text-yellow-400; }
-.status-investigating { @apply bg-blue-500/20 text-blue-400; }
+.status-investigating,
+.status-in_progress { @apply bg-blue-500/20 text-blue-400; }
 .status-resolved { @apply bg-green-500/20 text-green-400; }
 .status-false_positive { @apply bg-gray-500/20 text-gray-400; }
+.status-escalated { @apply bg-purple-500/20 text-purple-400; }
+.status-closed { @apply bg-gray-500/20 text-gray-400; }
+.status-open { @apply bg-red-500/20 text-red-400; }
+.status-pending { @apply bg-yellow-500/20 text-yellow-400; }
+.status-contained { @apply bg-yellow-500/20 text-yellow-400; }
+.status-eradicated { @apply bg-purple-500/20 text-purple-400; }
+.status-recovered { @apply bg-green-500/20 text-green-400; }
 
-/* Glow animation for live indicator */
+/* ─── Neon Glow Effects ───────────────────────────────────────────────────── */
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 4px #10b981, 0 0 8px #10b98140; }
-  50% { box-shadow: 0 0 8px #10b981, 0 0 16px #10b98160; }
+  0%, 100% { box-shadow: 0 0 4px #00ff88, 0 0 8px #00ff8840; }
+  50% { box-shadow: 0 0 8px #00ff88, 0 0 16px #00ff8860; }
 }
 .live-indicator { animation: pulse-glow 2s ease-in-out infinite; }
 
-/* Table row hover */
+@keyframes pulse-critical-glow {
+  0%, 100% { box-shadow: 0 0 4px #ff4444, 0 0 8px #ff444440; opacity: 1; }
+  50% { box-shadow: 0 0 12px #ff4444, 0 0 24px #ff444460; opacity: 0.8; }
+}
+.critical-pulse { animation: pulse-critical-glow 1.5s ease-in-out infinite; }
+
+@keyframes neon-border-pulse {
+  0%, 100% { border-color: rgba(0, 212, 255, 0.3); }
+  50% { border-color: rgba(0, 212, 255, 0.6); }
+}
+.neon-border { animation: neon-border-pulse 3s ease-in-out infinite; }
+
+@keyframes scan-line {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+.scan-line {
+  position: absolute;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0, 212, 255, 0.15), transparent);
+  animation: scan-line 8s linear infinite;
+  pointer-events: none;
+}
+
+/* ─── Table Row Hover ─────────────────────────────────────────────────────── */
 .data-row:hover { @apply bg-white/5; }
+
+/* ─── Slide Panel ─────────────────────────────────────────────────────────── */
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+.slide-panel { animation: slideInRight 0.3s ease-out forwards; }
+
+/* ─── Chip Component ──────────────────────────────────────────────────────── */
+.chip {
+  @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium cursor-pointer transition-all;
+}
+.chip-active {
+  @apply bg-cyber-accent/20 text-cyber-accent border border-cyber-accent/40;
+}
+.chip-inactive {
+  @apply bg-cyber-card text-cyber-muted border border-cyber-border hover:text-white hover:border-cyber-muted;
+}
+
+/* ─── MITRE Heatmap Cell ──────────────────────────────────────────────────── */
+.mitre-cell {
+  @apply rounded text-[9px] font-mono text-center cursor-pointer transition-all;
+  min-width: 28px;
+  min-height: 24px;
+}
+.mitre-cell:hover {
+  @apply ring-1 ring-cyber-accent;
+}
+
+/* ─── Recharts Tooltip ────────────────────────────────────────────────────── */
+.recharts-default-tooltip {
+  background: #161b22 !important;
+  border: 1px solid #30363d !important;
+  border-radius: 8px !important;
+}
+
+/* ─── Neon Text Glow ──────────────────────────────────────────────────────── */
+.text-neon-cyan {
+  color: #00d4ff;
+  text-shadow: 0 0 7px rgba(0, 212, 255, 0.3), 0 0 20px rgba(0, 212, 255, 0.1);
+}
+
+.text-neon-green {
+  color: #00ff88;
+  text-shadow: 0 0 7px rgba(0, 255, 136, 0.3), 0 0 20px rgba(0, 255, 136, 0.1);
+}
+
+/* ─── Card Glow on Hover ──────────────────────────────────────────────────── */
+.card-glow:hover {
+  box-shadow: 0 0 15px rgba(0, 212, 255, 0.08), 0 0 30px rgba(0, 212, 255, 0.04);
+  border-color: rgba(0, 212, 255, 0.2);
+}
+
+/* ─── Input Focus Glow ────────────────────────────────────────────────────── */
+input:focus, select:focus, textarea:focus {
+  box-shadow: 0 0 0 1px rgba(0, 212, 255, 0.3);
+}
+
+/* ─── Dragging Ghost ──────────────────────────────────────────────────────── */
+.dragging { opacity: 0.5; }
