@@ -1,105 +1,135 @@
-name: insider_threat_response
+name: Insider Threat / Data Exfiltration Response
 description: >
   Automated response to data exfiltration and insider threat alerts.
-  Checks destination IP reputation, performs Shodan host lookup, disables
-  the user account in Active Directory, creates a case, and sends a
-  high-priority Slack alert.
+  Monitors for large outbound transfers, unusual access patterns, and
+  privilege abuse. Enriches context and creates investigation case.
 enabled: true
 
 trigger:
-  rule_id: CN-EXFIL-*
-  severity:
-    - high
-    - critical
+  severity: [high, critical]
   category: exfiltration
 
 steps:
-  - name: check_dest_reputation
-    action: abuseipdb_lookup
+  - name: Check Destination IP Reputation
+    action: abuseipdb_check
+    condition: "{{alert.destination_ip is defined}}"
     input:
-      ip: "{{ alert.destination_ip }}"
-      max_age_days: 90
-    output: abuse_result
-    condition: "alert.destination_ip is not none and not is_internal(alert.destination_ip)"
+      ip: "{{alert.destination_ip}}"
+    output: abuse_dst_result
     on_failure: continue
-    retry_count: 2
     timeout: 30
 
-  - name: shodan_dest_lookup
+  - name: Shodan Lookup on Destination
     action: shodan_lookup
+    condition: "{{alert.destination_ip is defined}}"
     input:
-      ip: "{{ alert.destination_ip }}"
-    output: shodan_result
-    condition: "alert.destination_ip is not none and not is_internal(alert.destination_ip)"
+      ip: "{{alert.destination_ip}}"
+    output: shodan_dst_result
     on_failure: continue
-    retry_count: 2
     timeout: 30
 
-  - name: disable_user_account
+  - name: VirusTotal Destination Check
+    action: virustotal_lookup
+    condition: "{{alert.destination_ip is defined}}"
+    input:
+      target: "{{alert.destination_ip}}"
+      type: ip
+    output: vt_dst_result
+    on_failure: continue
+    timeout: 30
+
+  - name: Block Exfiltration Destination
+    action: firewall_block_ip
+    condition: "{{vt_dst_result.malicious > 0 or abuse_dst_result.score > 30}}"
+    input:
+      ip: "{{alert.destination_ip}}"
+      duration: 604800
+      firewall_type: generic
+    output: block_result
+    on_failure: continue
+    timeout: 30
+
+  - name: Disable Compromised User Account
     action: ad_disable_user
+    condition: "{{alert.severity == 'critical' and alert.username is defined}}"
     input:
-      username: "{{ alert.username }}"
-    output: ad_result
-    condition: >
-      alert.username is not none
-      and alert.username != ''
-      and (alert.severity == 'critical'
-           or (abuse_result.output.score | default(0)) > 70)
+      username: "{{alert.username}}"
+    output: disable_result
     on_failure: continue
-    retry_count: 1
-    timeout: 30
+    timeout: 60
 
-  - name: create_insider_case
+  - name: Isolate Source Endpoint
+    action: isolate_endpoint
+    condition: "{{alert.severity == 'critical' and alert.agent_id is defined}}"
+    input:
+      agent_id: "{{alert.agent_id}}"
+    output: isolate_result
+    on_failure: continue
+    timeout: 60
+
+  - name: Create Investigation Case
     action: create_case
     input:
-      title: "[Insider Threat] {{ alert.title }}"
+      title: "Data Exfiltration — {{alert.username}} on {{alert.hostname}}"
       description: >
         Potential data exfiltration detected.
-        User: {{ alert.username | default('N/A') }}.
-        Source host: {{ alert.hostname | default('N/A') }}.
-        Destination IP: {{ alert.destination_ip | default('N/A') }}.
-        AbuseIPDB score: {{ abuse_result.output.score | default('N/A') }}.
-        Destination country: {{ abuse_result.output.country_code | default('N/A') }}.
-        Shodan open ports: {{ shodan_result.output.ports | default('N/A') }}.
-        Shodan vulns: {{ shodan_result.output.vuln_count | default('N/A') }}.
-        Shodan org: {{ shodan_result.output.org | default('N/A') }}.
-        User account disabled: {{ ad_result.output.message | default('Skipped') }}.
+        User: {{alert.username}} on {{alert.hostname}}.
+        Destination: {{alert.destination_ip}}:{{alert.destination_port}}.
+        Data transferred: {{alert.bytes_out}} bytes.
+        AbuseIPDB score: {{abuse_dst_result.score}}%.
+        VT score: {{vt_dst_result.malicious}}/{{vt_dst_result.total}}.
       severity: critical
       tags:
-        - insider-threat
         - data-exfiltration
-        - account-disabled
-        - soar-automated
+        - insider-threat
+        - T1041
+        - automated-response
     output: case_result
-    on_failure: continue
-    retry_count: 1
+    on_failure: abort
     timeout: 15
 
-  - name: pagerduty_alert
+  - name: Create JIRA Ticket for Legal/HR
+    action: jira_ticket
+    condition: "{{alert.severity == 'critical'}}"
+    input:
+      project: SEC
+      summary: "Insider Threat Investigation — {{alert.username}}"
+      description: >
+        Data exfiltration alert for user {{alert.username}}.
+        {{alert.bytes_out}} bytes transferred to {{alert.destination_ip}}.
+        CyberNest Case: {{case_result.case_id}}.
+        Requires legal/HR review.
+      priority: High
+      labels:
+        - insider-threat
+        - security-incident
+    output: jira_result
+    on_failure: continue
+    timeout: 30
+
+  - name: Notify SOC — Critical Exfiltration
     action: slack_notify
     input:
-      message: >
-        :rotating_light: *CRITICAL: Insider Threat / Data Exfiltration*
+      message: |
+        :rotating_light: *DATA EXFILTRATION DETECTED*
 
-        *Alert:* {{ alert.title }}
-        *User:* {{ alert.username | default('N/A') }}
-        *Source Host:* {{ alert.hostname | default('N/A') }}
-        *Destination:* {{ alert.destination_ip | default('N/A') }} ({{ abuse_result.output.country_code | default('??') }})
+        *User:* `{{alert.username}}`
+        *Host:* `{{alert.hostname}}` ({{alert.agent_id}})
+        *Destination:* `{{alert.destination_ip}}:{{alert.destination_port}}`
+        *Data Volume:* {{alert.bytes_out}} bytes
 
-        *Threat Intelligence:*
-        - AbuseIPDB Score: {{ abuse_result.output.score | default('N/A') }}
-        - Destination Org: {{ shodan_result.output.org | default('N/A') }}
-        - Open Ports: {{ shodan_result.output.ports | default('N/A') }}
-        - Known Vulns: {{ shodan_result.output.vuln_count | default(0) }}
+        *Threat Intel:*
+        - AbuseIPDB: {{abuse_dst_result.score}}%
+        - VT: {{vt_dst_result.malicious}}/{{vt_dst_result.total}}
+        - Shodan: {{shodan_dst_result.ports}}
 
         *Actions Taken:*
-        - AD Account Disabled: {{ ad_result.output.message | default('Skipped (conditions not met)') }}
-        - Case Created: {{ case_result.output.case_id | default('N/A') }}
+        - Destination IP blocked
+        - User account disabled (if critical)
+        - Endpoint isolated (if critical)
 
-        *This requires immediate investigation.*
-      title: "CRITICAL: Insider Threat - {{ alert.username | default('Unknown User') }}"
-      severity: critical
-      mention: "<!channel>"
+        *Case:* {{case_result.case_id}}
+        *JIRA:* {{jira_result.issue_key}}
     output: slack_result
     on_failure: continue
-    timeout: 15
+    timeout: 10

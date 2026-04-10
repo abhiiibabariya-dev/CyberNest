@@ -9,10 +9,16 @@ RUN apt-get update && \
 
 FROM python:3.13-slim
 WORKDIR /app
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libpq5 && \
+    rm -rf /var/lib/apt/lists/*
 COPY --from=builder /install /usr/local
 COPY alert_manager/ /app/alert_manager/
 COPY shared/ /app/shared/
+
 RUN adduser --disabled-password --gecos "" cybernest && chown -R cybernest:cybernest /app
 USER cybernest
-ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app
 CMD ["python", "-m", "alert_manager.main"]

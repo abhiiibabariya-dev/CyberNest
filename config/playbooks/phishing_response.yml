@@ -1,111 +1,110 @@
-name: phishing_response
+name: Phishing Email Response
 description: >
-  Automated response to phishing email alerts. Checks the sender domain WHOIS
-  data, scans extracted URLs on VirusTotal, blocks the sender, creates a
-  case, and notifies the security team via email.
+  Automated response to phishing email alerts. Checks sender domain WHOIS,
+  looks up URLs and attachments on VirusTotal, blocks malicious domains,
+  and creates an investigation case.
 enabled: true
 
 trigger:
-  rule_id: CN-EMAIL-*
-  severity:
-    - medium
-    - high
-    - critical
+  severity: [medium, high, critical]
   category: phishing
 
 steps:
-  - name: sender_whois
+  - name: WHOIS Lookup on Sender Domain
     action: whois_lookup
     input:
-      domain: "{{ alert.parsed_event.sender_domain | default(alert.parsed_event.from_domain | default('')) }}"
+      domain: "{{alert.email_sender_domain}}"
     output: whois_result
-    condition: >
-      alert.parsed_event is not none
-      and (alert.parsed_event.sender_domain | default(alert.parsed_event.from_domain | default(''))) != ''
     on_failure: continue
-    retry_count: 2
     timeout: 30
 
-  - name: vt_url_scan
+  - name: VirusTotal Domain Check
     action: virustotal_lookup
     input:
-      target: "{{ alert.parsed_event.url | default(alert.parsed_event.suspicious_url | default('')) }}"
+      target: "{{alert.email_sender_domain}}"
+      type: domain
+    output: vt_domain_result
+    on_failure: continue
+    timeout: 30
+
+  - name: VirusTotal URL Check
+    action: virustotal_lookup
+    condition: "{{alert.url is defined}}"
+    input:
+      target: "{{alert.url}}"
       type: url
     output: vt_url_result
-    condition: >
-      alert.parsed_event is not none
-      and (alert.parsed_event.url | default(alert.parsed_event.suspicious_url | default(''))) != ''
     on_failure: continue
-    retry_count: 2
     timeout: 30
 
-  - name: block_sender
-    action: firewall_block_ip
+  - name: VirusTotal Attachment Hash Check
+    action: virustotal_lookup
+    condition: "{{alert.file_hash is defined}}"
     input:
-      ip: "{{ alert.parsed_event.sender_ip | default(alert.source_ip | default('')) }}"
-      duration: 604800
-      firewall_type: generic
-      reason: "Phishing sender blocked - {{ alert.rule_id }}: {{ alert.parsed_event.subject | default(alert.title) }}"
-    output: block_result
-    condition: >
-      (alert.parsed_event.sender_ip | default(alert.source_ip | default(''))) != ''
-      and ((vt_url_result.output.malicious | default(0)) > 0
-           or alert.severity in ['high', 'critical'])
+      target: "{{alert.file_hash}}"
+      type: hash
+    output: vt_attachment_result
     on_failure: continue
-    retry_count: 1
     timeout: 30
 
-  - name: create_phishing_case
+  - name: AbuseIPDB Check on Sender IP
+    action: abuseipdb_check
+    condition: "{{alert.source_ip is defined}}"
+    input:
+      ip: "{{alert.source_ip}}"
+    output: abuse_result
+    on_failure: continue
+    timeout: 30
+
+  - name: Block Malicious Sender Domain
+    action: firewall_block_ip
+    condition: "{{vt_domain_result.malicious > 0 or vt_url_result.malicious > 0}}"
+    input:
+      ip: "{{alert.email_sender_domain}}"
+      duration: 2592000
+      firewall_type: generic
+    output: block_result
+    on_failure: continue
+    timeout: 30
+
+  - name: Create Phishing Investigation Case
     action: create_case
     input:
-      title: "[Phishing] {{ alert.title }}"
+      title: "Phishing Email from {{alert.email_sender_domain}}"
       description: >
         Phishing email detected.
-        Subject: {{ alert.parsed_event.subject | default('N/A') }}.
-        Sender: {{ alert.parsed_event.from_address | default('N/A') }}.
-        Sender domain: {{ alert.parsed_event.sender_domain | default('N/A') }}.
-        Domain registered: {{ whois_result.output.creation_date | default('N/A') }}.
-        Domain registrar: {{ whois_result.output.registrar | default('N/A') }}.
-        Suspicious URL: {{ alert.parsed_event.url | default('N/A') }}.
-        VT URL malicious: {{ vt_url_result.output.malicious | default('N/A') }}.
-        Recipients affected: {{ alert.parsed_event.recipient_count | default('N/A') }}.
-      severity: "{{ alert.severity }}"
+        Sender: {{alert.email_sender}}.
+        Domain: {{alert.email_sender_domain}}.
+        Subject: {{alert.email_subject}}.
+        Domain age: {{whois_result.creation_date}}.
+        VT Domain: {{vt_domain_result.malicious}}/{{vt_domain_result.total}}.
+        Recipients may need notification.
+      severity: medium
       tags:
         - phishing
+        - T1566
         - email-security
-        - soar-automated
     output: case_result
     on_failure: continue
-    retry_count: 1
     timeout: 15
 
-  - name: notify_security_team
-    action: email_notify
+  - name: Notify SOC
+    action: slack_notify
     input:
-      to: "security-team@company.com"
-      subject: "[CyberNest] Phishing Alert - {{ alert.parsed_event.subject | default(alert.title) }}"
-      message: >
-        A phishing email has been detected and automatically processed.
+      message: |
+        :email: *PHISHING EMAIL DETECTED*
 
-        Alert: {{ alert.title }}
-        Severity: {{ alert.severity }}
-        Sender: {{ alert.parsed_event.from_address | default('N/A') }}
-        Subject: {{ alert.parsed_event.subject | default('N/A') }}
+        *Sender:* `{{alert.email_sender}}`
+        *Domain:* `{{alert.email_sender_domain}}`
+        *Subject:* {{alert.email_subject}}
 
-        WHOIS Analysis:
-        - Domain Registrar: {{ whois_result.output.registrar | default('N/A') }}
-        - Domain Created: {{ whois_result.output.creation_date | default('N/A') }}
-        - Domain Country: {{ whois_result.output.country | default('N/A') }}
+        *Analysis:*
+        - Domain Age: {{whois_result.creation_date}}
+        - VT Domain Score: {{vt_domain_result.malicious}}/{{vt_domain_result.total}}
+        - VT URL Score: {{vt_url_result.malicious}}/{{vt_url_result.total}}
+        - AbuseIPDB: {{abuse_result.score}}%
 
-        URL Analysis:
-        - VT Malicious: {{ vt_url_result.output.malicious | default('N/A') }}
-        - VT Permalink: {{ vt_url_result.output.permalink | default('N/A') }}
-
-        Actions Taken:
-        - Sender Blocked: {{ block_result.output.message | default('Skipped') }}
-        - Case Created: {{ case_result.output.case_id | default('N/A') }}
-
-        Please review the case for further investigation.
-    output: email_result
+        *Case:* {{case_result.case_id}}
+    output: slack_result
     on_failure: continue
-    timeout: 30
+    timeout: 10
