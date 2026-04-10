@@ -4,6 +4,7 @@
 
 -- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- =============================================================================
 -- ENUM TYPES
@@ -74,7 +75,7 @@ CREATE TABLE rules (
     rule_id             VARCHAR(64) NOT NULL UNIQUE,
     name                VARCHAR(255) NOT NULL,
     description         TEXT,
-    level               INTEGER NOT NULL CHECK (level BETWEEN 1 AND 5),
+    level               INTEGER NOT NULL CHECK (level BETWEEN 0 AND 15),
     category            VARCHAR(100),
     mitre_tactic        VARCHAR(100),
     mitre_technique     TEXT[] DEFAULT '{}',
@@ -207,6 +208,9 @@ CREATE TABLE playbooks (
     name            VARCHAR(255) NOT NULL,
     description     TEXT,
     trigger_type    VARCHAR(50) NOT NULL DEFAULT 'manual',
+    trigger_rule_id VARCHAR(64),
+    trigger_severity VARCHAR(100),
+    trigger_category VARCHAR(100),
     trigger_conditions JSONB DEFAULT '{}'::jsonb,
     content_yaml    TEXT NOT NULL,
     is_enabled      BOOLEAN NOT NULL DEFAULT TRUE,

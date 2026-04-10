@@ -1,245 +1,193 @@
-# CyberNest - SIEM + SOAR Platform
+```
+   ______      __              _   __          __
+  / ____/_  __/ /_  ___  _____/ | / /__  _____/ /_
+ / /   / / / / __ \/ _ \/ ___/  |/ / _ \/ ___/ __/
+/ /___/ /_/ / /_/ /  __/ /  / /|  /  __(__  ) /_
+\____/\__, /_.___/\___/_/  /_/ |_/\___/____/\__/
+     /____/
+```
 
-> A unified Security Information & Event Management (SIEM) and Security Orchestration, Automation & Response (SOAR) platform built for SOC teams.
+# CyberNest — SIEM + SOAR Platform
+
+> Enterprise-grade Security Information & Event Management (SIEM) and Security Orchestration, Automation & Response (SOAR) platform. Open source. Self-hosted.
 
 ![Python](https://img.shields.io/badge/Python-3.13-blue?logo=python)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi)
+![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript)
+![Elasticsearch](https://img.shields.io/badge/Elasticsearch-8.11-005571?logo=elasticsearch)
+![Kafka](https://img.shields.io/badge/Kafka-7.5-231F20?logo=apachekafka)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker)
 ![License](https://img.shields.io/badge/License-MIT-green)
-![Status](https://img.shields.io/badge/Status-Active_Development-orange)
+
+---
 
 ## Features
 
-### SIEM
-- **Log Ingestion** — Collect logs from multiple sources (syslog, CEF, APIs, file-based, agents)
-- **Log Parsing & Normalization** — Auto-parse syslog, CEF, and extract IPs, hostnames, and metadata
-- **Detection Engine** — YAML-based correlation rules mapped to MITRE ATT&CK framework
-- **Real-time Alerting** — Severity-based alerts with WebSocket live streaming
-- **Log Search** — Full-text search with severity, IP, and time-range filters
-- **Dashboard** — SOC analyst overview with stats, charts, MITRE ATT&CK heatmap
+| Category | Capabilities |
+|----------|-------------|
+| **Log Collection** | Cross-platform agent (Windows/Linux/macOS), Syslog (UDP/TCP), 13+ log format parsers |
+| **Detection Engine** | 60+ built-in rules, Sigma rule support, YAML custom rules, ML anomaly detection (UEBA) |
+| **Correlation** | Sliding window rules, threshold detection, sequence tracking, impossible travel |
+| **Alert Management** | Deduplication, enrichment, risk scoring, SLA tracking, auto-escalation |
+| **SOAR** | Playbook engine, 12+ action integrations, Jinja2 templates, auto/manual trigger |
+| **Threat Intelligence** | OTX, Abuse.ch, Emerging Threats feeds, IOC database, real-time enrichment |
+| **Case Management** | Full incident lifecycle, tasks, observables, timeline, evidence, PDF export |
+| **Dashboard** | Real-time WebSocket feeds, MITRE ATT&CK heatmap, geo map, Splunk-like search |
+| **Integrations** | Slack, Email, PagerDuty, Teams, JIRA, VirusTotal, AbuseIPDB, Shodan |
 
-### SOAR
-- **Playbook Engine** — YAML-defined automated response playbooks with 7 action types
-- **Orchestration** — Block IPs, isolate hosts, disable users, enrich IOCs, create tickets, send notifications
-- **Case Management** — Full incident lifecycle with timeline tracking
-- **Automated Response** — Alert-triggered or manual playbook execution
-- **Enrichment** — IOC enrichment pipeline (extendable to VirusTotal, AbuseIPDB, Shodan)
+## Architecture
 
-## Screenshots
-
-> Dashboard with live stats, alert timeline, severity charts, and MITRE ATT&CK heatmap
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                        CyberNest Platform                            │
+├──────────┬───────────┬────────────┬──────────┬──────────┬───────────┤
+│  Agent   │  Syslog   │   Parser   │ Correlator│  Alert   │   SOAR   │
+│ (endpoints)│ Receiver │  Service   │  Engine  │ Manager  │  Engine  │
+├──────────┴───────────┴─────┬──────┴──────────┴──────────┴───────────┤
+│                            │                                         │
+│         ┌──────────────────▼──────────────────┐                     │
+│         │         Apache Kafka                 │                     │
+│         │  (raw.* → parsed.events → alerts)    │                     │
+│         └──────────────────┬──────────────────┘                     │
+│                            │                                         │
+│  ┌────────────┐  ┌────────▼────────┐  ┌──────────────┐             │
+│  │ PostgreSQL  │  │ Elasticsearch   │  │    Redis      │             │
+│  │ (metadata)  │  │ (events/search) │  │ (cache/pubsub)│             │
+│  └────────────┘  └─────────────────┘  └──────────────┘             │
+├──────────────────────────────────────────────────────────────────────┤
+│                   Manager API (FastAPI)                               │
+│              REST + WebSocket + Agent Receiver                        │
+├──────────────────────────────────────────────────────────────────────┤
+│                  React Dashboard (TypeScript)                         │
+│           Dark SOC UI — Tailwind CSS + Recharts                      │
+├──────────────────────────────────────────────────────────────────────┤
+│                       Nginx (Reverse Proxy)                          │
+└──────────────────────────────────────────────────────────────────────┘
+```
 
 ## Quick Start
 
-### Option 1: Script Setup (Recommended)
-
 ```bash
+# Clone
 git clone https://github.com/abhiiibabariya-dev/CyberNest.git
 cd CyberNest
 
-# Linux/macOS
-chmod +x setup.sh run.sh
-./setup.sh
-./run.sh
+# Setup and start (one command)
+bash scripts/setup.sh
 
-# Windows
-setup.bat
-run.bat
+# Or manually:
+cp .env.example .env
+docker-compose up -d
 ```
 
-### Option 2: Docker
+**Dashboard:** http://localhost
+**API Docs:** http://localhost/docs
 
-```bash
-git clone https://github.com/abhiiibabariya-dev/CyberNest.git
-cd CyberNest
-docker-compose up --build
-```
-
-### Option 3: Manual Setup
-
-```bash
-git clone https://github.com/abhiiibabariya-dev/CyberNest.git
-cd CyberNest
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate      # Linux/macOS
-# venv\Scripts\activate       # Windows
-
-# Install dependencies
-pip install -r backend/requirements.txt
-
-# Seed demo data (100 events, 15 alerts, 5 incidents, 6 playbooks)
-cd backend
-python seed.py
-
-# Start server
-python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-**Open http://localhost:8000** and explore the dashboard.
-
-### Demo Credentials
+## Default Credentials
 
 | User | Password | Role |
 |------|----------|------|
-| `admin` | `admin123` | Admin |
-| `analyst` | `analyst123` | Analyst |
+| `admin` | `CyberNest@2025!` | Super Admin |
+| `analyst` | `Analyst@2025!` | Analyst |
+| `soc_lead` | `SocLead@2025!` | SOC Lead |
+
+> Change these immediately in production!
 
 ## Tech Stack
 
-| Component | Technology |
-|-----------|-----------|
-| Backend | Python 3.13 + FastAPI |
-| Database | SQLite (dev) / PostgreSQL (prod) |
-| Task Queue | Celery + Redis (optional) |
-| Frontend | HTML/CSS/JS — Cyber-themed Dashboard |
-| Config | YAML-based rules & playbooks |
-| API | RESTful + WebSocket (live alerts) |
-| Auth | JWT + bcrypt |
-| Deployment | Docker / docker-compose |
+| Layer | Technology |
+|-------|-----------|
+| **Backend API** | Python 3.13, FastAPI, SQLAlchemy (async), asyncpg |
+| **Frontend** | React 18, TypeScript 5, TailwindCSS, Recharts, Zustand |
+| **Message Bus** | Apache Kafka (Confluent 7.5) |
+| **Search/Index** | Elasticsearch 8.11 |
+| **Database** | PostgreSQL 15 |
+| **Cache/PubSub** | Redis 7.2 |
+| **Reverse Proxy** | Nginx |
+| **Containers** | Docker Compose |
 
-## API Endpoints
+## Services
 
-### Authentication
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/auth/register` | Register new user |
-| POST | `/api/v1/auth/login` | Login, get JWT token |
+| Service | Port | Description |
+|---------|------|-------------|
+| `cybernest-manager` | 5000, 5601 | REST API + Agent receiver |
+| `cybernest-dashboard` | 3000 | React web UI |
+| `cybernest-parser` | — | Log parsing + enrichment |
+| `cybernest-correlator` | — | Detection engine |
+| `cybernest-alert-manager` | — | Alert lifecycle |
+| `cybernest-soar` | — | Playbook execution |
+| `cybernest-indexer` | — | Elasticsearch writer |
+| `cybernest-threat-intel` | — | IOC feed ingestion |
+| `cybernest-syslog` | 514/udp, 601/tcp | Syslog receiver |
+| `nginx` | 80, 443 | Reverse proxy |
 
-### SIEM
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/events/ingest` | Ingest a single log event |
-| POST | `/api/v1/events/ingest/batch` | Ingest batch of logs |
-| GET | `/api/v1/events` | Search/list events |
-| GET | `/api/v1/alerts` | List alerts (filter by severity/status) |
-| PATCH | `/api/v1/alerts/{id}` | Update alert status |
-| GET | `/api/v1/rules` | List detection rules |
-| POST | `/api/v1/rules` | Create detection rule |
-| GET | `/api/v1/sources` | List log sources |
+## Agent Installation
 
-### SOAR
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/v1/incidents` | List incidents |
-| POST | `/api/v1/incidents` | Create incident |
-| PATCH | `/api/v1/incidents/{id}` | Update incident |
-| GET | `/api/v1/playbooks` | List playbooks |
-| POST | `/api/v1/playbooks/{id}/run` | Execute a playbook |
-| GET | `/api/v1/playbooks/runs` | List playbook run history |
+### Linux
+```bash
+curl -sSL https://raw.githubusercontent.com/abhiiibabariya-dev/CyberNest/master/scripts/install-agent.sh | \
+  bash -s -- --manager-url https://YOUR_SERVER:5601 --api-key YOUR_KEY
+```
 
-### Dashboard
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/v1/dashboard/stats` | Full dashboard statistics |
-| WS | `/ws/alerts/live` | WebSocket live alert stream |
+### Windows (PowerShell)
+```powershell
+iwr -useb https://raw.githubusercontent.com/abhiiibabariya-dev/CyberNest/master/scripts/install-agent.ps1 | iex
+```
 
 ## Detection Rules
 
-CyberNest uses YAML-based detection rules in `config/rules/`. Included rules:
+CyberNest ships with 60+ built-in detection rules covering:
 
-| Rule | Severity | MITRE ATT&CK |
-|------|----------|---------------|
-| Brute Force Login | High | T1110 |
-| SSH Brute Force | High | T1110.001 |
-| Suspected C2 Communication | Critical | T1071 |
-| Suspicious PowerShell | Critical | T1059.001 |
-| Ransomware Indicators | Critical | T1486 |
-| Port Scan Detection | Medium | T1046 |
-| Data Exfiltration | High | T1048 |
-| Lateral Movement | High | T1021 |
-| Privilege Escalation | Critical | T1068 |
-| New Admin Account | High | T1136 |
+- **Windows:** Authentication, credential access, privilege escalation, execution
+- **Linux:** Authentication, persistence, suspicious activity
+- **Network:** Port scans, host sweeps, C2 beaconing, DNS tunneling
+- **Cloud:** AWS CloudTrail anomalies
 
-### Adding Custom Rules
+Custom rules use a simple YAML format. Sigma rules are also supported.
 
-```yaml
-name: My Custom Rule
-description: Detects something suspicious
-severity: high
-enabled: true
-alert_title: "Custom Alert Title"
-mitre_tactic: Execution
-mitre_technique: T1059
-
-logic: or
-conditions:
-  - field: message
-    operator: contains
-    value: "suspicious_keyword"
-  - field: src_ip
-    operator: equals
-    value: "10.0.0.100"
-```
+See [docs/rule-writing.md](docs/rule-writing.md) for the rule authoring guide.
 
 ## SOAR Playbooks
 
-Pre-built playbooks in `config/playbooks/`:
+Pre-built automated response playbooks:
 
-| Playbook | Trigger | Actions |
-|----------|---------|---------|
-| Block Malicious IP | Auto (alert) | Enrich IOC, block IP, create ticket, notify SOC |
-| Disable Compromised Account | Manual | Disable user, create ticket, notify team |
-| Isolate Infected Host | Auto (critical) | Isolate host, enrich IOCs, create ticket, notify |
+- **Brute Force Response** — Enrich IP, block if malicious, create case, notify SOC
+- **Malware Response** — Isolate endpoint, kill process, enrich hash, create case
+- **Phishing Response** — WHOIS lookup, URL/hash analysis, block domain
+- **Insider Threat Response** — Block destination, disable user, isolate endpoint
 
-### Available Actions
+## API Documentation
 
-| Action | Description |
-|--------|-------------|
-| `block_ip` | Block IP on firewall |
-| `isolate_host` | Network-isolate endpoint |
-| `disable_user` | Disable user account |
-| `enrich_ioc` | Enrich IOC with threat intel |
-| `create_ticket` | Create investigation ticket |
-| `send_notification` | Send alert to Slack/email/PagerDuty |
-| `log` | Log playbook action |
+Full REST API with OpenAPI/Swagger docs available at `/docs` when running.
 
-## Project Structure
+See [docs/api-reference.md](docs/api-reference.md) for the complete API reference.
 
+## Development
+
+```bash
+# Backend (manager)
+cd manager
+pip install -r requirements.txt
+uvicorn main:app --reload --port 5000
+
+# Frontend (dashboard)
+cd dashboard
+npm install
+npm run dev
 ```
-CyberNest/
-├── backend/
-│   ├── main.py              # FastAPI app entry point
-│   ├── seed.py              # Demo data seeder
-│   ├── requirements.txt     # Python dependencies
-│   ├── core/                # Auth, database, models, schemas, config
-│   ├── siem/                # Log parser, detection engine, ingest service
-│   ├── soar/                # Playbook engine, case manager
-│   └── api/                 # REST API routes, WebSocket
-├── frontend/
-│   ├── index.html           # Dashboard (9 pages)
-│   └── src/                 # CSS + JavaScript
-├── config/
-│   ├── rules/               # YAML detection rules
-│   └── playbooks/           # YAML SOAR playbooks
-├── Dockerfile               # Container build
-├── docker-compose.yml       # One-command deployment
-├── setup.sh / setup.bat     # Quick setup scripts
-├── run.sh / run.bat         # Quick run scripts
-└── LICENSE
-```
-
-## Roadmap
-
-- [ ] Real syslog UDP/TCP listener
-- [ ] Sigma rule import support
-- [ ] VirusTotal / AbuseIPDB / Shodan integration
-- [ ] Slack / PagerDuty / email notifications
-- [ ] PostgreSQL production database
-- [ ] Alert correlation engine
-- [ ] Endpoint log collection agent
-- [ ] PDF/CSV incident reports
-- [ ] MITRE ATT&CK Navigator integration
-- [ ] Role-based access control (frontend)
-- [ ] Audit logging
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
-[MIT](LICENSE)
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
 
 ---
 

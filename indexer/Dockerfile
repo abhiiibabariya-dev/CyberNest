@@ -12,7 +12,10 @@ WORKDIR /app
 COPY --from=builder /install /usr/local
 COPY indexer/ /app/indexer/
 COPY shared/ /app/shared/
+
 RUN adduser --disabled-password --gecos "" cybernest && chown -R cybernest:cybernest /app
 USER cybernest
-ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app
 CMD ["python", "-m", "indexer.es_writer"]

@@ -3,371 +3,218 @@
     CyberNest Agent Installer for Windows
 
 .DESCRIPTION
-    Downloads and installs the CyberNest SIEM agent as a Windows service.
-    Supports installation via NSSM (preferred) or sc.exe (fallback).
+    Downloads, configures, and installs the CyberNest security agent as a Windows service.
 
 .PARAMETER ManagerUrl
-    URL of the CyberNest Manager (e.g., https://siem.example.com)
+    The CyberNest Manager WebSocket URL (e.g., wss://server:5601/ws/agent)
 
 .PARAMETER ApiKey
-    Agent API key obtained from the CyberNest dashboard
-
-.PARAMETER Version
-    Agent version to install (default: latest)
+    Agent API key from CyberNest Manager
 
 .PARAMETER InstallDir
-    Installation directory (default: C:\Program Files\CyberNest\Agent)
-
-.PARAMETER Port
-    Agent metrics port (default: 9100)
+    Installation directory (default: C:\Program Files\CyberNest)
 
 .EXAMPLE
-    .\install-agent.ps1 -ManagerUrl https://siem.example.com -ApiKey YOUR_API_KEY
-
-.EXAMPLE
-    # One-liner (run in elevated PowerShell):
-    iwr -useb https://raw.githubusercontent.com/abhiiibabariya-dev/CyberNest/main/scripts/install-agent.ps1 | iex
+    .\install-agent.ps1 -ManagerUrl "wss://server:5601/ws/agent" -ApiKey "your-key"
 #>
 
-[CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
-    [string]$ManagerUrl,
+    [Parameter(Mandatory=$false)]
+    [string]$ManagerUrl = $env:MANAGER_URL,
 
-    [Parameter(Mandatory = $true)]
-    [string]$ApiKey,
+    [Parameter(Mandatory=$false)]
+    [string]$ApiKey = $env:API_KEY,
 
-    [string]$Version = "latest",
-
-    [string]$InstallDir = "C:\Program Files\CyberNest\Agent",
-
-    [int]$Port = 9100
+    [string]$InstallDir = "C:\Program Files\CyberNest"
 )
 
 $ErrorActionPreference = "Stop"
-$ProgressPreference = "SilentlyContinue"
 
-# ---------- Configuration ----------
-$ServiceName = "CyberNestAgent"
-$ServiceDisplayName = "CyberNest SIEM Agent"
-$ServiceDescription = "CyberNest SIEM agent - collects and forwards security logs"
-$ConfigDir = "C:\ProgramData\CyberNest"
-$LogDir = "C:\ProgramData\CyberNest\logs"
-$BinaryName = "cybernest-agent.exe"
+# Colors
+function Write-Info  { Write-Host "[INFO]  $args" -ForegroundColor Cyan }
+function Write-Ok    { Write-Host "[OK]    $args" -ForegroundColor Green }
+function Write-Err   { Write-Host "[ERROR] $args" -ForegroundColor Red; exit 1 }
 
-# ---------- Helpers ----------
-function Write-Step {
-    param([string]$Message)
-    Write-Host "`n==> $Message" -ForegroundColor Cyan
+# Check admin
+$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin) {
+    Write-Err "This script must be run as Administrator"
 }
 
-function Write-Ok {
-    param([string]$Message)
-    Write-Host "[OK]    $Message" -ForegroundColor Green
-}
-
-function Write-Warn {
-    param([string]$Message)
-    Write-Host "[WARN]  $Message" -ForegroundColor Yellow
-}
-
-function Write-Err {
-    param([string]$Message)
-    Write-Host "[ERROR] $Message" -ForegroundColor Red
-}
-
-# ---------- Check admin ----------
-$currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-if (-not $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Err "This script requires Administrator privileges."
-    Write-Host "  Right-click PowerShell and select 'Run as administrator'"
-    exit 1
-}
+if (-not $ManagerUrl) { Write-Err "ManagerUrl is required. Set -ManagerUrl or `$env:MANAGER_URL" }
+if (-not $ApiKey)     { Write-Err "ApiKey is required. Set -ApiKey or `$env:API_KEY" }
 
 Write-Host ""
-Write-Host "============================================================" -ForegroundColor Green
-Write-Host "  CyberNest Agent Installer - Windows" -ForegroundColor Green
-Write-Host "============================================================" -ForegroundColor Green
+Write-Host "  +=============================================+" -ForegroundColor Cyan
+Write-Host "  |     CyberNest Agent Installer (Windows)     |" -ForegroundColor Cyan
+Write-Host "  +=============================================+" -ForegroundColor Cyan
 Write-Host ""
 
-# ==========================================================================
-# 1. Create directories
-# ==========================================================================
-
-Write-Step "Creating directories..."
-
-foreach ($dir in @($InstallDir, $ConfigDir, $LogDir, "$InstallDir\buffer")) {
-    if (-not (Test-Path $dir)) {
-        New-Item -ItemType Directory -Path $dir -Force | Out-Null
-        Write-Ok "Created $dir"
-    }
-    else {
-        Write-Ok "Exists: $dir"
-    }
+# Check Python
+Write-Info "Checking Python..."
+$pythonCmd = $null
+foreach ($cmd in @("python", "python3", "py")) {
+    try {
+        $ver = & $cmd --version 2>&1
+        if ($ver -match "Python 3\.") {
+            $pythonCmd = $cmd
+            break
+        }
+    } catch {}
 }
 
-# ==========================================================================
-# 2. Stop existing service if running
-# ==========================================================================
-
-Write-Step "Checking for existing installation..."
-
-$existingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-if ($existingService) {
-    Write-Warn "Existing service found (status: $($existingService.Status))"
-    if ($existingService.Status -eq "Running") {
-        Write-Host "  Stopping existing service..."
-        Stop-Service -Name $ServiceName -Force
-        Start-Sleep -Seconds 3
+if (-not $pythonCmd) {
+    Write-Info "Python 3 not found. Installing via winget..."
+    try {
+        winget install Python.Python.3.13 --accept-package-agreements --accept-source-agreements --silent
+        $pythonCmd = "python"
+    } catch {
+        Write-Err "Cannot install Python 3. Please install from https://python.org"
     }
-    Write-Ok "Existing service stopped"
+}
+Write-Ok "Python found: $(& $pythonCmd --version)"
+
+# Create directories
+Write-Info "Creating directories..."
+$configDir = "$InstallDir\config"
+$logDir = "$InstallDir\logs"
+$stateDir = "$InstallDir\state"
+foreach ($dir in @($InstallDir, $configDir, $logDir, $stateDir)) {
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
 }
 
-# ==========================================================================
-# 3. Download agent binary
-# ==========================================================================
-
-Write-Step "Downloading CyberNest agent ($Version)..."
-
-$arch = if ([Environment]::Is64BitOperatingSystem) { "amd64" } else { "386" }
-$downloadUrl = "$ManagerUrl/api/agents/download?version=$Version&os=windows&arch=$arch"
-$binaryPath = Join-Path $InstallDir $BinaryName
-$tempFile = [System.IO.Path]::GetTempFileName()
+# Download agent files
+Write-Info "Downloading CyberNest agent..."
+$repoUrl = "https://github.com/abhiiibabariya-dev/CyberNest/archive/refs/heads/master.zip"
+$zipPath = "$env:TEMP\cybernest-master.zip"
+$extractPath = "$env:TEMP\cybernest-extract"
 
 try {
-    $headers = @{ "Authorization" = "Bearer $ApiKey" }
-    Invoke-WebRequest -Uri $downloadUrl -OutFile $tempFile -Headers $headers -UseBasicParsing
-    Move-Item -Path $tempFile -Destination $binaryPath -Force
-    Write-Ok "Agent downloaded to $binaryPath"
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Invoke-WebRequest -Uri $repoUrl -OutFile $zipPath -UseBasicParsing
+    if (Test-Path $extractPath) { Remove-Item $extractPath -Recurse -Force }
+    Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+    $agentSrc = Get-ChildItem -Path $extractPath -Directory | Select-Object -First 1
+    Copy-Item -Path "$($agentSrc.FullName)\agent\*" -Destination $InstallDir -Recurse -Force
+    Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+    Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+} catch {
+    Write-Info "Download failed, continuing with existing files..."
 }
-catch {
-    Write-Warn "Could not download agent binary: $_"
-    Write-Warn "Creating placeholder - download manually from your CyberNest Manager"
+Write-Ok "Agent files ready"
 
-    $placeholderContent = @"
-@echo off
-echo [CyberNest Agent] Binary not yet installed. Download from your CyberNest Manager.
-exit /b 1
-"@
-    Set-Content -Path (Join-Path $InstallDir "cybernest-agent.cmd") -Value $placeholderContent
-    # Create a minimal exe placeholder note
-    Set-Content -Path $binaryPath -Value "PLACEHOLDER - Replace with actual binary"
+# Create virtual environment
+Write-Info "Setting up Python environment..."
+& $pythonCmd -m venv "$InstallDir\venv"
+& "$InstallDir\venv\Scripts\pip.exe" install --quiet --upgrade pip
+if (Test-Path "$InstallDir\requirements.txt") {
+    & "$InstallDir\venv\Scripts\pip.exe" install --quiet -r "$InstallDir\requirements.txt"
+} else {
+    & "$InstallDir\venv\Scripts\pip.exe" install --quiet psutil watchdog aiohttp pyyaml python-dateutil structlog pywin32
 }
-finally {
-    Remove-Item -Path $tempFile -ErrorAction SilentlyContinue
-}
+Write-Ok "Dependencies installed"
 
-# ==========================================================================
-# 4. Write configuration
-# ==========================================================================
-
-Write-Step "Writing agent configuration..."
-
-$configPath = Join-Path $ConfigDir "agent.yml"
-$configContent = @"
-# CyberNest Agent Configuration
-# Generated by install-agent.ps1 on $(Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
-
+# Write configuration
+Write-Info "Writing configuration..."
+$config = @"
 manager:
   url: "$ManagerUrl"
   api_key: "$ApiKey"
-  tls_verify: true
-  # ca_cert: C:\ProgramData\CyberNest\ca.crt  # Uncomment for self-signed certs
 
-agent:
-  id: ""  # Auto-generated on first run
-  port: $Port
-  log_level: info
-  log_file: "$($LogDir -replace '\\', '/')/agent.log"
-  buffer_dir: "$($InstallDir -replace '\\', '/')/buffer"
-  max_buffer_size_mb: 256
+tls:
+  enabled: false
+  ca_cert: "$configDir\certs\ca.pem"
+  client_cert: "$configDir\certs\agent.pem"
+  client_key: "$configDir\certs\agent-key.pem"
 
 collectors:
-  windows_event_log:
+  windows_event:
     enabled: true
     channels:
-      - name: Security
-        event_ids: []  # Empty = all events
-      - name: System
-        event_ids: []
-      - name: Application
-        event_ids: []
-      - name: Microsoft-Windows-Sysmon/Operational
-        event_ids: []
-      - name: Microsoft-Windows-PowerShell/Operational
-        event_ids: [4103, 4104, 4105, 4106]
-      - name: Microsoft-Windows-Windows Defender/Operational
-        event_ids: []
-      - name: Microsoft-Windows-WMI-Activity/Operational
-        event_ids: []
+      - Security
+      - System
+      - Application
+      - Microsoft-Windows-PowerShell/Operational
+      - Microsoft-Windows-Sysmon/Operational
 
-  file:
+  fim:
     enabled: true
     paths:
-      - path: C:/inetlogs/W3SVC1/u_ex*.log
-        type: iis_access
+      - C:\Windows\System32
+      - C:\Windows\SysWOW64
+      - C:\Program Files
+    exclude_patterns:
+      - "*.log"
+      - "*.tmp"
+      - "*.etl"
 
-  process:
+  process_monitor:
     enabled: true
-    interval_seconds: 60
-    track_command_line: true
+    interval_seconds: 10
 
-  network:
+  network_monitor:
     enabled: true
-    capture_dns: true
-    capture_connections: true
+    interval_seconds: 15
 
-  sysmon:
+  registry_monitor:
     enabled: true
-    # Requires Sysmon to be installed separately
 
-heartbeat:
-  interval_seconds: 30
-  timeout_seconds: 10
-
-output:
-  batch_size: 100
-  flush_interval_seconds: 5
-  compression: gzip
-  retry_max: 5
-  retry_backoff_seconds: 10
+heartbeat_interval: 30
+batch_size: 50
+batch_timeout: 1.0
+log_level: INFO
+state_file: "$stateDir\agent-state.json"
 "@
+$config | Out-File -FilePath "$configDir\cybernest-agent.yml" -Encoding UTF8
+Write-Ok "Configuration written"
 
-Set-Content -Path $configPath -Value $configContent -Encoding UTF8
-Write-Ok "Configuration written to $configPath"
+# Register as Windows service using NSSM or sc.exe
+Write-Info "Registering Windows service..."
+$serviceName = "CyberNestAgent"
+$pythonExe = "$InstallDir\venv\Scripts\python.exe"
+$agentScript = "$InstallDir\cybernest_agent.py"
+$serviceArgs = "`"$agentScript`" --config `"$configDir\cybernest-agent.yml`""
 
-# ==========================================================================
-# 5. Install as Windows service
-# ==========================================================================
-
-Write-Step "Installing Windows service..."
-
-$nssmPath = $null
-
-# Check for NSSM
-$nssmCheck = Get-Command nssm -ErrorAction SilentlyContinue
-if ($nssmCheck) {
-    $nssmPath = $nssmCheck.Source
-}
-elseif (Test-Path "C:\tools\nssm\nssm.exe") {
-    $nssmPath = "C:\tools\nssm\nssm.exe"
-}
-
-if ($nssmPath) {
-    # Install via NSSM (preferred)
-    Write-Host "  Using NSSM for service installation..."
-
-    & $nssmPath install $ServiceName $binaryPath "--config" $configPath 2>$null
-    & $nssmPath set $ServiceName DisplayName $ServiceDisplayName 2>$null
-    & $nssmPath set $ServiceName Description $ServiceDescription 2>$null
-    & $nssmPath set $ServiceName Start SERVICE_AUTO_START 2>$null
-    & $nssmPath set $ServiceName AppStdout "$LogDir\service-stdout.log" 2>$null
-    & $nssmPath set $ServiceName AppStderr "$LogDir\service-stderr.log" 2>$null
-    & $nssmPath set $ServiceName AppRotateFiles 1 2>$null
-    & $nssmPath set $ServiceName AppRotateBytes 10485760 2>$null
-    & $nssmPath set $ServiceName AppRestartDelay 10000 2>$null
-    & $nssmPath set $ServiceName ObjectName LocalSystem 2>$null
-
-    Write-Ok "Service installed via NSSM"
-}
-else {
-    # Install via sc.exe (fallback)
-    Write-Host "  NSSM not found, using sc.exe..."
-
-    if ($existingService) {
-        sc.exe delete $ServiceName 2>$null | Out-Null
+# Try to create service
+try {
+    # Remove existing service if present
+    $existing = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+    if ($existing) {
+        Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
+        & sc.exe delete $serviceName 2>&1 | Out-Null
         Start-Sleep -Seconds 2
     }
 
-    $binPathEscaped = "`"$binaryPath`" --config `"$configPath`""
-    sc.exe create $ServiceName `
-        binPath= $binPathEscaped `
-        DisplayName= $ServiceDisplayName `
-        start= auto `
-        obj= LocalSystem | Out-Null
+    # Create service
+    & sc.exe create $serviceName binPath= "`"$pythonExe`" $serviceArgs" start= auto DisplayName= "CyberNest Security Agent" 2>&1 | Out-Null
+    & sc.exe description $serviceName "CyberNest SIEM endpoint agent - collects security events and forwards to manager" 2>&1 | Out-Null
+    & sc.exe failure $serviceName reset= 86400 actions= restart/60000/restart/60000/restart/60000 2>&1 | Out-Null
 
-    sc.exe description $ServiceName $ServiceDescription | Out-Null
-
-    # Configure recovery: restart on first, second, and subsequent failures
-    sc.exe failure $ServiceName reset= 86400 actions= restart/10000/restart/10000/restart/30000 | Out-Null
-
-    Write-Ok "Service installed via sc.exe"
+    Start-Service -Name $serviceName
+    Write-Ok "Service '$serviceName' created and started"
+} catch {
+    Write-Info "Service registration failed. Start manually:"
+    Write-Host "  & `"$pythonExe`" `"$agentScript`" --config `"$configDir\cybernest-agent.yml`""
 }
 
-# ==========================================================================
-# 6. Configure Windows Firewall
-# ==========================================================================
-
-Write-Step "Configuring Windows Firewall..."
-
-$firewallRule = Get-NetFirewallRule -DisplayName "CyberNest Agent" -ErrorAction SilentlyContinue
-if (-not $firewallRule) {
-    New-NetFirewallRule -DisplayName "CyberNest Agent" `
-        -Description "Allow CyberNest Agent metrics and health check" `
-        -Direction Inbound `
-        -Protocol TCP `
-        -LocalPort $Port `
-        -Action Allow `
-        -Profile Domain, Private | Out-Null
-    Write-Ok "Firewall rule created for port $Port"
-}
-else {
-    Write-Ok "Firewall rule already exists"
-}
-
-# ==========================================================================
-# 7. Start the service
-# ==========================================================================
-
-Write-Step "Starting CyberNest agent service..."
-
+# Add firewall rule
 try {
-    Start-Service -Name $ServiceName
-    Start-Sleep -Seconds 3
-
-    $svc = Get-Service -Name $ServiceName
-    if ($svc.Status -eq "Running") {
-        Write-Ok "CyberNest agent is running"
-    }
-    else {
-        Write-Warn "Service status: $($svc.Status)"
-        Write-Warn "Check logs at: $LogDir"
-    }
-}
-catch {
-    Write-Warn "Could not start service: $_"
-    Write-Warn "Start manually: Start-Service $ServiceName"
-}
-
-# ==========================================================================
-# 8. Summary
-# ==========================================================================
+    New-NetFirewallRule -DisplayName "CyberNest Agent" -Direction Outbound -Action Allow -Program $pythonExe -ErrorAction SilentlyContinue | Out-Null
+    Write-Ok "Firewall rule added"
+} catch {}
 
 Write-Host ""
-Write-Host "============================================================" -ForegroundColor Green
-Write-Host "  CyberNest Agent - Installation Complete" -ForegroundColor Green
-Write-Host "============================================================" -ForegroundColor Green
+Write-Host "  +=============================================+" -ForegroundColor Green
+Write-Host "  |  CyberNest Agent installed successfully!    |" -ForegroundColor Green
+Write-Host "  +=============================================+" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Install dir:    $InstallDir"
-Write-Host "  Config:         $configPath"
-Write-Host "  Logs:           $LogDir"
-Write-Host "  Service:        $ServiceName"
-Write-Host "  Manager URL:    $ManagerUrl"
+Write-Host "  Install dir:  $InstallDir" -ForegroundColor White
+Write-Host "  Config:       $configDir\cybernest-agent.yml" -ForegroundColor White
+Write-Host "  Service:      $serviceName" -ForegroundColor White
+Write-Host "  Logs:         $logDir" -ForegroundColor White
 Write-Host ""
-Write-Host "  Useful commands:" -ForegroundColor Cyan
-Write-Host "    Get-Service $ServiceName                 # Check status"
-Write-Host "    Restart-Service $ServiceName              # Restart agent"
-Write-Host "    Get-Content '$LogDir\agent.log' -Tail 50  # View logs"
-Write-Host "    notepad '$configPath'                      # Edit config"
-Write-Host ""
-Write-Host "  To uninstall:" -ForegroundColor Yellow
-Write-Host "    Stop-Service $ServiceName"
-if ($nssmPath) {
-    Write-Host "    nssm remove $ServiceName confirm"
-}
-else {
-    Write-Host "    sc.exe delete $ServiceName"
-}
-Write-Host "    Remove-Item -Recurse '$InstallDir'"
-Write-Host "    Remove-Item -Recurse '$ConfigDir'"
+Write-Host "  Commands:" -ForegroundColor Yellow
+Write-Host "    Get-Service $serviceName          # Check status"
+Write-Host "    Restart-Service $serviceName       # Restart"
+Write-Host "    Stop-Service $serviceName          # Stop"
 Write-Host ""

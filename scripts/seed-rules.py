@@ -1,433 +1,283 @@
 #!/usr/bin/env python3
 """
-CyberNest SIEM + SOAR Platform - Database Seed Script
-======================================================
-Reads detection rules from correlator/rules/ and playbooks from
-config/playbooks/, then inserts them into PostgreSQL along with
-default users and sample notification channels.
-
-Usage:
-    python scripts/seed-rules.py
-
-Environment variables (or defaults from docker-compose):
-    POSTGRES_HOST     (default: localhost)
-    POSTGRES_PORT     (default: 5432)
-    POSTGRES_DB       (default: cybernest)
-    POSTGRES_USER     (default: cybernest)
-    POSTGRES_PASSWORD (default: CyberNest2025!)
+CyberNest — Seed detection rules, playbooks, and default users into PostgreSQL.
+Run after init.sql has created the schema.
 """
-
-import hashlib
 import os
 import sys
-import glob
+import uuid
+import asyncio
 from pathlib import Path
 
 try:
-    import yaml
+    import asyncpg
 except ImportError:
-    print("[WARN] PyYAML not installed. Installing...")
-    import subprocess
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "pyyaml", "-q"])
-    import yaml
+    print("[ERROR] asyncpg not installed. Run: pip install asyncpg pyyaml")
+    sys.exit(1)
 
 try:
-    import psycopg2
-    import psycopg2.extras
+    import yaml
 except ImportError:
-    print("[WARN] psycopg2 not installed. Installing psycopg2-binary...")
-    import subprocess
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "psycopg2-binary", "-q"])
-    import psycopg2
-    import psycopg2.extras
+    print("[ERROR] pyyaml not installed. Run: pip install pyyaml")
+    sys.exit(1)
 
-try:
-    import bcrypt
-except ImportError:
-    print("[WARN] bcrypt not installed. Installing...")
-    import subprocess
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "bcrypt", "-q"])
-    import bcrypt
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://cybernest:CyberNest2025!@localhost:5432/cybernest",
+)
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
-SCRIPT_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = SCRIPT_DIR.parent
-RULES_DIR = PROJECT_DIR / "correlator" / "rules"
-PLAYBOOKS_DIR = PROJECT_DIR / "config" / "playbooks"
-
-DB_CONFIG = {
-    "host": os.getenv("POSTGRES_HOST", "localhost"),
-    "port": int(os.getenv("POSTGRES_PORT", "5432")),
-    "dbname": os.getenv("POSTGRES_DB", "cybernest"),
-    "user": os.getenv("POSTGRES_USER", "cybernest"),
-    "password": os.getenv("POSTGRES_PASSWORD", "CyberNest2025!"),
-}
-
-# Severity string -> integer mapping for the rules.level column (1-5)
-LEVEL_MAP = {
-    "informational": 1,
-    "low": 2,
-    "medium": 3,
-    "high": 4,
-    "critical": 5,
-}
-
-# ---------------------------------------------------------------------------
-# Default users
-# ---------------------------------------------------------------------------
-
-DEFAULT_USERS = [
-    {
-        "username": "admin",
-        "email": "admin@cybernest.local",
-        "password": "CyberNest@2025!",
-        "role": "super_admin",
-    },
-    {
-        "username": "analyst",
-        "email": "analyst@cybernest.local",
-        "password": "Analyst@2025!",
-        "role": "analyst",
-    },
-]
-
-# ---------------------------------------------------------------------------
-# Default notification channels
-# ---------------------------------------------------------------------------
-
-DEFAULT_CHANNELS = [
-    {
-        "name": "SOC Email",
-        "channel_type": "email",
-        "config_json": {
-            "smtp_host": "smtp.example.com",
-            "smtp_port": 587,
-            "smtp_user": "alerts@cybernest.local",
-            "smtp_password": "",
-            "recipients": ["soc-team@cybernest.local"],
-            "use_tls": True,
-        },
-        "is_enabled": False,
-    },
-    {
-        "name": "Slack SOC Channel",
-        "channel_type": "slack",
-        "config_json": {
-            "webhook_url": "https://hooks.slack.com/services/REPLACE/WITH/WEBHOOK",
-            "channel": "#soc-alerts",
-            "username": "CyberNest",
-            "icon_emoji": ":shield:",
-        },
-        "is_enabled": False,
-    },
-    {
-        "name": "PagerDuty On-Call",
-        "channel_type": "pagerduty",
-        "config_json": {
-            "routing_key": "REPLACE_WITH_PAGERDUTY_ROUTING_KEY",
-            "severity_mapping": {
-                "critical": "critical",
-                "high": "error",
-                "medium": "warning",
-                "low": "info",
-            },
-        },
-        "is_enabled": False,
-    },
-    {
-        "name": "Microsoft Teams",
-        "channel_type": "teams",
-        "config_json": {
-            "webhook_url": "https://outlook.office.com/webhook/REPLACE/WITH/URL",
-        },
-        "is_enabled": False,
-    },
-    {
-        "name": "SIEM Webhook",
-        "channel_type": "webhook",
-        "config_json": {
-            "url": "https://siem-webhook.example.com/cybernest",
-            "method": "POST",
-            "headers": {"Content-Type": "application/json", "X-Source": "CyberNest"},
-            "timeout": 10,
-        },
-        "is_enabled": False,
-    },
-]
+DSN = (
+    DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://")
+    .replace("postgresql+psycopg://", "postgresql://")
+)
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+async def get_connection():
+    return await asyncpg.connect(DSN)
 
 
-def hash_password(password: str) -> str:
-    """Generate bcrypt hash compatible with the existing init.sql format."""
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+async def seed_users(conn):
+    """Insert default admin and analyst users if they don't exist."""
+    users = [
+        ("admin", "admin@cybernest.local", "CyberNest@2025!", "super_admin"),
+        ("analyst", "analyst@cybernest.local", "Analyst@2025!", "analyst"),
+        ("soc_lead", "soclead@cybernest.local", "SocLead@2025!", "soc_lead"),
+    ]
 
-
-def collect_yaml_files(directory: Path) -> list[Path]:
-    """Recursively find all .yml and .yaml files in directory."""
-    files = []
-    if not directory.exists():
-        return files
-    for ext in ("*.yml", "*.yaml"):
-        files.extend(directory.rglob(ext))
-    return sorted(files)
-
-
-def parse_rules_file(filepath: Path) -> list[dict]:
-    """Parse a YAML rules file and return a list of rule dicts."""
-    with open(filepath, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-    if data is None:
-        return []
-    # Handle both top-level list and {"rules": [...]} format
-    if isinstance(data, dict) and "rules" in data:
-        return data["rules"] if isinstance(data["rules"], list) else []
-    if isinstance(data, list):
-        return data
-    return []
-
-
-def parse_playbook_file(filepath: Path) -> dict | None:
-    """Parse a single playbook YAML file."""
-    with open(filepath, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-    if data and isinstance(data, dict) and "name" in data:
-        return data
-    return None
-
-
-# ---------------------------------------------------------------------------
-# Seed functions
-# ---------------------------------------------------------------------------
-
-
-def seed_users(cur) -> int:
-    """Insert default users if they don't already exist."""
-    inserted = 0
-    for user in DEFAULT_USERS:
-        cur.execute("SELECT 1 FROM users WHERE username = %s", (user["username"],))
-        if cur.fetchone():
-            print(f"  [SKIP] User '{user['username']}' already exists")
-            continue
-        pw_hash = hash_password(user["password"])
-        cur.execute(
-            """
-            INSERT INTO users (username, email, password_hash, role, is_active)
-            VALUES (%s, %s, %s, %s, TRUE)
-            """,
-            (user["username"], user["email"], pw_hash, user["role"]),
+    count = 0
+    for username, email, password, role in users:
+        exists = await conn.fetchval(
+            "SELECT 1 FROM users WHERE username = $1", username
         )
-        inserted += 1
-        print(f"  [ADD]  User '{user['username']}' ({user['role']})")
-    return inserted
+        if exists:
+            print(f"  [skip] User '{username}' already exists")
+            continue
 
-
-def seed_rules(cur) -> int:
-    """Read all rule YAML files and insert into the rules table."""
-    rule_files = collect_yaml_files(RULES_DIR)
-    if not rule_files:
-        print("  [WARN] No rule files found in", RULES_DIR)
-        return 0
-
-    inserted = 0
-    skipped = 0
-    for filepath in rule_files:
-        rules = parse_rules_file(filepath)
-        rel_path = filepath.relative_to(PROJECT_DIR)
-        for rule in rules:
-            rule_id = rule.get("id", "")
-            if not rule_id:
-                continue
-
-            # Check if already exists
-            cur.execute("SELECT 1 FROM rules WHERE rule_id = %s", (rule_id,))
-            if cur.fetchone():
-                skipped += 1
-                continue
-
-            name = rule.get("name", rule_id)
-            description = rule.get("description", "")
-            level_str = rule.get("level", "medium")
-            level_int = LEVEL_MAP.get(level_str.lower(), 3)
-            category = rule.get("category", "")
-            mitre_tactic = rule.get("mitre_tactic", "")
-            mitre_technique = rule.get("mitre_technique", [])
-            if isinstance(mitre_technique, str):
-                mitre_technique = [mitre_technique]
-            is_enabled = rule.get("enabled", True)
-
-            # Store full YAML of the individual rule
-            content_yaml = yaml.dump(rule, default_flow_style=False, sort_keys=False)
-
-            cur.execute(
-                """
-                INSERT INTO rules (rule_id, name, description, level, category,
-                                   mitre_tactic, mitre_technique, content_yaml, is_enabled)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    rule_id,
-                    name,
-                    description,
-                    level_int,
-                    category,
-                    mitre_tactic,
-                    mitre_technique,
-                    content_yaml,
-                    is_enabled,
-                ),
+        await conn.execute(
+            """
+            INSERT INTO users (id, username, email, password_hash, role, is_active, created_at, updated_at)
+            VALUES (
+                uuid_generate_v4(), $1, $2,
+                crypt($3, gen_salt('bf')),
+                $4::user_role,
+                true, now(), now()
             )
-            inserted += 1
-
-    print(f"  [ADD]  {inserted} rules inserted, {skipped} already existed")
-    print(f"  [INFO] Scanned {len(rule_files)} rule files from {RULES_DIR.relative_to(PROJECT_DIR)}")
-    return inserted
-
-
-def seed_playbooks(cur) -> int:
-    """Read all playbook YAML files and insert into the playbooks table."""
-    pb_files = collect_yaml_files(PLAYBOOKS_DIR)
-    if not pb_files:
-        print("  [WARN] No playbook files found in", PLAYBOOKS_DIR)
-        return 0
-
-    inserted = 0
-    skipped = 0
-    for filepath in pb_files:
-        playbook = parse_playbook_file(filepath)
-        if not playbook:
-            continue
-
-        name = playbook.get("name", filepath.stem)
-
-        # Check if already exists
-        cur.execute("SELECT 1 FROM playbooks WHERE name = %s", (name,))
-        if cur.fetchone():
-            skipped += 1
-            continue
-
-        description = playbook.get("description", "")
-        trigger = playbook.get("trigger", {})
-        trigger_type = "alert" if trigger else "manual"
-        trigger_conditions = psycopg2.extras.Json(trigger) if trigger else psycopg2.extras.Json({})
-        is_enabled = playbook.get("enabled", True)
-
-        content_yaml = yaml.dump(playbook, default_flow_style=False, sort_keys=False)
-
-        cur.execute(
-            """
-            INSERT INTO playbooks (name, description, trigger_type, trigger_conditions,
-                                   content_yaml, is_enabled)
-            VALUES (%s, %s, %s, %s, %s, %s)
             """,
-            (name, description, trigger_type, trigger_conditions, content_yaml, is_enabled),
+            username, email, password, role,
         )
-        inserted += 1
+        print(f"  [ok]   User '{username}' created (role: {role})")
+        count += 1
 
-    print(f"  [ADD]  {inserted} playbooks inserted, {skipped} already existed")
-    print(f"  [INFO] Scanned {len(pb_files)} playbook files from {PLAYBOOKS_DIR.relative_to(PROJECT_DIR)}")
-    return inserted
+    return count
 
 
-def seed_notification_channels(cur) -> int:
-    """Insert default notification channels."""
-    inserted = 0
-    for ch in DEFAULT_CHANNELS:
-        cur.execute(
-            "SELECT 1 FROM notification_channels WHERE name = %s AND channel_type = %s",
-            (ch["name"], ch["channel_type"]),
-        )
-        if cur.fetchone():
-            print(f"  [SKIP] Channel '{ch['name']}' already exists")
+async def seed_rules(conn):
+    """Load YAML rule files from correlator/rules/ and config/rules/ into DB."""
+    project_root = Path(__file__).resolve().parent.parent
+    rule_dirs = [
+        project_root / "correlator" / "rules",
+        project_root / "config" / "rules",
+    ]
+
+    level_map = {
+        "info": 1, "informational": 1,
+        "low": 3,
+        "medium": 5,
+        "high": 8,
+        "critical": 12,
+    }
+
+    count = 0
+    for rule_dir in rule_dirs:
+        if not rule_dir.exists():
+            print(f"  [skip] Rule directory not found: {rule_dir}")
             continue
 
-        cur.execute(
-            """
-            INSERT INTO notification_channels (name, channel_type, config_json, is_enabled)
-            VALUES (%s, %s, %s, %s)
-            """,
-            (
-                ch["name"],
-                ch["channel_type"],
-                psycopg2.extras.Json(ch["config_json"]),
-                ch["is_enabled"],
-            ),
+        for yml_path in sorted(rule_dir.rglob("*.yml")):
+            try:
+                raw = yml_path.read_text(encoding="utf-8")
+                docs = list(yaml.safe_load_all(raw))
+
+                for doc in docs:
+                    if not doc or not isinstance(doc, dict):
+                        continue
+
+                    # Handle files with a top-level "rules" list
+                    rules_list = doc.get("rules", [doc] if "id" in doc else [])
+                    for rule in rules_list:
+                        if not isinstance(rule, dict) or "id" not in rule:
+                            continue
+
+                        rule_id = rule["id"]
+                        exists = await conn.fetchval(
+                            "SELECT 1 FROM rules WHERE rule_id = $1", rule_id
+                        )
+                        if exists:
+                            continue
+
+                        name = rule.get("name", rule_id)
+                        description = rule.get("description", "")
+                        level_str = str(rule.get("level", "medium")).lower()
+                        level = level_map.get(level_str, 5)
+                        category = rule.get("category", "general")
+                        mitre_tactic = rule.get("mitre_tactic", "")
+                        mitre_tech = rule.get("mitre_technique", [])
+                        if isinstance(mitre_tech, str):
+                            mitre_tech = [mitre_tech]
+
+                        await conn.execute(
+                            """
+                            INSERT INTO rules (id, rule_id, name, description, level,
+                                category, mitre_tactic, mitre_technique, content_yaml,
+                                is_enabled, created_at, updated_at)
+                            VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6, $7, $8,
+                                true, now(), now())
+                            """,
+                            rule_id, name, description, level, category,
+                            mitre_tactic, mitre_tech, raw,
+                        )
+                        count += 1
+            except Exception as e:
+                print(f"  [warn] Failed to parse {yml_path.name}: {e}")
+
+    return count
+
+
+async def seed_playbooks(conn):
+    """Load playbook YAML files and insert into DB."""
+    project_root = Path(__file__).resolve().parent.parent
+    playbook_dirs = [
+        project_root / "config" / "playbooks",
+        project_root / "soar" / "playbooks",
+    ]
+
+    count = 0
+    for pb_dir in playbook_dirs:
+        if not pb_dir.exists():
+            continue
+        for yml_path in sorted(pb_dir.glob("*.yml")):
+            try:
+                raw = yml_path.read_text(encoding="utf-8")
+                doc = yaml.safe_load(raw)
+                if not doc or not isinstance(doc, dict):
+                    continue
+
+                name = doc.get("name", yml_path.stem)
+                exists = await conn.fetchval(
+                    "SELECT 1 FROM playbooks WHERE name = $1", name
+                )
+                if exists:
+                    print(f"  [skip] Playbook '{name}' already exists")
+                    continue
+
+                description = doc.get("description", "")
+                trigger = doc.get("trigger", {})
+                trigger_rule_id = trigger.get("rule_id")
+                trigger_sev = trigger.get("severity")
+                if isinstance(trigger_sev, list):
+                    trigger_sev = ",".join(trigger_sev)
+                trigger_cat = trigger.get("category")
+                is_enabled = doc.get("enabled", True)
+
+                await conn.execute(
+                    """
+                    INSERT INTO playbooks (id, name, description, trigger_rule_id,
+                        trigger_severity, trigger_category, content_yaml, is_enabled,
+                        created_at, updated_at)
+                    VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6, $7, now(), now())
+                    """,
+                    name, description, trigger_rule_id,
+                    trigger_sev, trigger_cat, raw, is_enabled,
+                )
+                count += 1
+            except Exception as e:
+                print(f"  [warn] Failed to parse {yml_path.name}: {e}")
+
+    return count
+
+
+async def seed_notification_channels(conn):
+    """Insert example notification channel configurations."""
+    channels = [
+        ("SOC Slack Channel", "slack",
+         '{"webhook_url":"","channel":"#soc-alerts"}', False),
+        ("SOC Email Distribution", "email",
+         '{"recipients":["soc@example.com"],"smtp_host":"","smtp_port":587}', False),
+        ("PagerDuty On-Call", "pagerduty",
+         '{"routing_key":"","severity_mapping":{"critical":"critical","high":"error"}}', False),
+    ]
+
+    count = 0
+    for name, ch_type, config, enabled in channels:
+        exists = await conn.fetchval(
+            "SELECT 1 FROM notification_channels WHERE name = $1", name
         )
-        inserted += 1
-        print(f"  [ADD]  Channel '{ch['name']}' ({ch['channel_type']})")
-    return inserted
+        if exists:
+            continue
+        await conn.execute(
+            """
+            INSERT INTO notification_channels (id, name, channel_type, config_json, is_enabled, created_at)
+            VALUES (uuid_generate_v4(), $1, $2::channel_type, $3::jsonb, $4, now())
+            """,
+            name, ch_type, config, enabled,
+        )
+        count += 1
+
+    return count
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
-
-def main():
+async def main():
     print("=" * 60)
-    print("  CyberNest Database Seed Script")
+    print("  CyberNest — Seed Script")
     print("=" * 60)
-    print()
-    print(f"  Database: {DB_CONFIG['user']}@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['dbname']}")
-    print(f"  Rules:    {RULES_DIR}")
-    print(f"  Playbooks:{PLAYBOOKS_DIR}")
     print()
 
     try:
-        conn = psycopg2.connect(**DB_CONFIG)
-        conn.autocommit = False
-        cur = conn.cursor()
-    except psycopg2.OperationalError as e:
-        print(f"[ERROR] Cannot connect to PostgreSQL: {e}")
-        print("        Make sure PostgreSQL is running and accessible.")
+        conn = await get_connection()
+    except Exception as e:
+        print(f"[ERROR] Cannot connect to database: {e}")
+        print(f"        DSN: {DSN}")
         sys.exit(1)
 
     try:
-        # Seed users
         print("[1/4] Seeding users...")
-        user_count = seed_users(cur)
+        u = await seed_users(conn)
+        print(f"       {u} users created")
+        print()
 
-        # Seed rules
-        print("\n[2/4] Seeding detection rules...")
-        rule_count = seed_rules(cur)
+        print("[2/4] Seeding detection rules...")
+        r = await seed_rules(conn)
+        print(f"       {r} rules loaded")
+        print()
 
-        # Seed playbooks
-        print("\n[3/4] Seeding SOAR playbooks...")
-        pb_count = seed_playbooks(cur)
+        print("[3/4] Seeding playbooks...")
+        p = await seed_playbooks(conn)
+        print(f"       {p} playbooks loaded")
+        print()
 
-        # Seed notification channels
-        print("\n[4/4] Seeding notification channels...")
-        ch_count = seed_notification_channels(cur)
-
-        conn.commit()
+        print("[4/4] Seeding notification channels...")
+        n = await seed_notification_channels(conn)
+        print(f"       {n} channels created")
+        print()
 
         # Summary
-        print()
-        print("=" * 60)
-        print("  Seed Summary")
-        print("=" * 60)
-        print(f"  Users:                 {user_count} inserted")
-        print(f"  Detection Rules:       {rule_count} inserted")
-        print(f"  SOAR Playbooks:        {pb_count} inserted")
-        print(f"  Notification Channels: {ch_count} inserted")
-        print("=" * 60)
-        print()
-        print("[OK] Database seeded successfully.")
+        total_users = await conn.fetchval("SELECT count(*) FROM users")
+        total_rules = await conn.fetchval("SELECT count(*) FROM rules")
+        total_pb = await conn.fetchval("SELECT count(*) FROM playbooks")
+        total_ch = await conn.fetchval("SELECT count(*) FROM notification_channels")
 
-    except Exception as e:
-        conn.rollback()
-        print(f"\n[ERROR] Seed failed: {e}")
-        sys.exit(1)
+        print("=" * 60)
+        print(f"  Users:                 {total_users}")
+        print(f"  Detection Rules:       {total_rules}")
+        print(f"  Playbooks:             {total_pb}")
+        print(f"  Notification Channels: {total_ch}")
+        print("=" * 60)
+        print()
+        print("  ✅ Seed complete!")
+
     finally:
-        cur.close()
-        conn.close()
+        await conn.close()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
