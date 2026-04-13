@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Shield, AlertCircle, Loader2, KeyRound } from 'lucide-react';
-import { useStore } from '../store';
+import { useCyberNestStore as useStore } from '../store';
 import { api } from '../services/api';
 
 export default function Login() {
@@ -32,10 +32,7 @@ export default function Login() {
       }
 
       const res = await api.login(username, password);
-      api.setToken(res.access_token);
-      if (res.refresh_token) {
-        localStorage.setItem('refresh_token', res.refresh_token);
-      }
+      api.setToken(res.access_token, res.refresh_token);
       setUser(res.user);
       navigate('/');
     } catch (err: any) {

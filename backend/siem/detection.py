@@ -99,5 +99,5 @@ def run_detection(event_data: dict) -> list[dict]:
         if result:
             result["source_event"] = event_data
             alerts.append(result)
-            logger.info(f"[DETECTION] {result[\'rule_name\']} | {result[\'severity\']} | src={event_data.get(\'src_ip\',\'N/A\')}")
+            logger.info(f"[DETECTION] {result['rule_name']} | {result['severity']} | src={event_data.get('src_ip','N/A')}")
     return alerts
