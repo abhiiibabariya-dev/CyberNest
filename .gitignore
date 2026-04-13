@@ -1,48 +1,40 @@
+# Environment — NEVER commit these
+.env
+*.env
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
+*.pyo
+.pytest_cache/
 *.egg-info/
 dist/
 build/
-.eggs/
-*.egg
-venv/
 .venv/
+venv/
 env/
 
-# Environment
-.env
-.env.local
-.env.production
-
-# Database
-*.db
-*.sqlite3
+# Node
+node_modules/
+dist/
 
 # IDE
-.vscode/
+.vscode/settings.json
 .idea/
 *.swp
-*.swo
 
 # OS
 .DS_Store
 Thumbs.db
-desktop.ini
 
 # Logs
-logs/
 *.log
+logs/
 
-# Redis
-dump.rdb
-
-# Node
-node_modules/
-package-lock.json
-
-# Distribution
-*.tar.gz
-*.whl
+# Docker
+*.pid
