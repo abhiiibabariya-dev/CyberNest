@@ -7,12 +7,12 @@ import axiosInstance, {
 import type { Rule, Case, PlaybookExecution, User } from '../types';
 
 export const api = {
-  setToken(token: string) { setTokens(token); },
+  setToken(token: string, refresh?: string) { setTokens(token, refresh); },
   clearToken() { clearTokens(); },
   isAuthenticated() { return !!getAccessToken(); },
 
   login: (username: string, password: string) =>
-    authApi.login({ username, password }) as Promise<{ access_token: string; user: User }>,
+    authApi.login({ username, password }) as Promise<{ access_token: string; refresh_token: string; user: User }>,
   register: (data: unknown) => authApi.register(data as Parameters<typeof authApi.register>[0]),
   getMe: () => authApi.me(),
 

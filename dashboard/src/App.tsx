@@ -17,6 +17,7 @@ import Reports from './pages/Reports'
 import Settings from './pages/Settings'
 import { api } from './services/api'
 import { useWebSocket } from './hooks/useWebSocket'
+import { useCyberNestStore } from './store'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,7 +30,8 @@ const queryClient = new QueryClient({
 })
 
 export default function App() {
-  const [user, setUser] = useState<any>(null)
+  const user = useCyberNestStore((s) => s.user)
+  const setUser = useCyberNestStore((s) => s.setUser)
   const [loading, setLoading] = useState(true)
   const [alertCount, setAlertCount] = useState(0)
   const [eps, setEps] = useState(0)
@@ -66,7 +68,6 @@ export default function App() {
     return () => clearInterval(interval)
   }, [user])
 
-  const handleLogin = (userData: any) => setUser(userData)
   const handleLogout = () => {
     api.clearToken()
     setUser(null)
@@ -83,7 +84,7 @@ export default function App() {
   if (!user) {
     return (
       <QueryClientProvider client={queryClient}>
-        <Login onLogin={handleLogin} />
+        <Login />
       </QueryClientProvider>
     )
   }

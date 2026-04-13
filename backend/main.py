@@ -40,6 +40,6 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.include_router(api_router, prefix="/api/v1")
 app.include_router(ws_router, prefix="/ws")
 
-frontend_path = os.path.join(os.path.dirname(__file__), "..", "frontend")
-if os.path.exists(frontend_path):
-    app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
+dashboard_dist = os.path.join(os.path.dirname(__file__), "..", "dashboard", "dist")
+if os.path.exists(dashboard_dist):
+    app.mount("/", StaticFiles(directory=dashboard_dist, html=True), name="dashboard")
