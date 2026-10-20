@@ -1,7 +1,7 @@
 aiokafka==0.12.0
 elasticsearch[async]==8.17.0
 redis[hiredis]==5.2.1
-orjson==3.10.13
+orjson==3.11.6
 structlog==24.4.0
 geoip2==4.8.1
 python-dateutil==2.9.0
