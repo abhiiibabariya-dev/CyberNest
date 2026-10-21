@@ -1,6 +1,6 @@
 aiokafka==0.12.0
 redis[hiredis]==5.2.1
-orjson==3.10.13
+orjson==3.11.6
 structlog==24.4.0
 pydantic==2.10.4
 pydantic-settings==2.7.1
